@@ -229,5 +229,5 @@ def test_state_child_modules_and_indexed_instances(tmp_path: Path) -> None:
     )
     doc = detect_and_load(path)
     addrs = {r.address for r in doc.resources_after}
-    assert 'module.workers.nebius_compute_v1_instance.node[0]' in addrs
+    assert "module.workers.nebius_compute_v1_instance.node[0]" in addrs
     assert 'module.workers.nebius_compute_v1_instance.node["blue"]' in addrs

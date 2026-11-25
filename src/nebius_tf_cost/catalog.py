@@ -47,13 +47,17 @@ class PriceCatalog:
         return float(value)
 
 
-def default_catalog_path() -> Path:
-    """Resolve the bundled catalog path."""
-    candidates = [
+def _catalog_candidates() -> list[Path]:
+    return [
         _PACKAGE_DATA,
         _REPO_DATA,
         Path.cwd() / "data" / "prices.json",
     ]
+
+
+def default_catalog_path() -> Path:
+    """Resolve the bundled catalog path."""
+    candidates = _catalog_candidates()
     for candidate in candidates:
         if candidate.is_file():
             return candidate

@@ -210,9 +210,7 @@ def test_local_ssd_usage_priced(catalog, fixtures_dir: Path) -> None:
         side="after",
         values={
             "resources": {"platform": "cpu-e2", "preset": "2vcpu-8gb"},
-            "boot_disk": {
-                "managed_disk": {"spec": {"type": "NETWORK_SSD", "size_gibibytes": 64}}
-            },
+            "boot_disk": {"managed_disk": {"spec": {"type": "NETWORK_SSD", "size_gibibytes": 64}}},
             "local_disks": {"passthrough_group": {"requested": True}},
         },
     )

@@ -106,6 +106,44 @@ Estimator = Callable[
 ]
 
 
+def _uniq(items: list[str]) -> list[str]:
+    """De-duplicate while preserving order."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in items:
+        if item not in seen:
+            seen.add(item)
+            out.append(item)
+    return out
+
+
+def _line(
+    snap: ResourceSnapshot,
+    cfg: EstimateConfig,
+    *,
+    amount: float,
+    details: str,
+    unknown: bool = False,
+    warnings: list[str] | None = None,
+    amount_min: float | None = None,
+    amount_max: float | None = None,
+) -> LineItem:
+    """Build a line item from a resource snapshot + runtime config."""
+    return LineItem(
+        address=snap.address,
+        resource_type=snap.type,
+        side=snap.side,
+        amount=amount,
+        currency=cfg.currency,
+        period=cfg.period,
+        details=details,
+        unknown=unknown,
+        warnings=list(warnings or []),
+        amount_min=amount_min,
+        amount_max=amount_max,
+    )
+
+
 def parse_preset(preset: str) -> tuple[int, int, int]:
     """Return (gpus, vcpus, ram_gib) from a Nebius preset name."""
     m = PRESET_RE.match(preset.strip())
@@ -489,13 +527,10 @@ def estimate_instance(
         cfg=cfg,
     )
     if parts.unknown:
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
+        return _line(
+            snap,
+            cfg,
             amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
             details=parts.details,
             unknown=True,
             warnings=parts.warnings,
@@ -537,13 +572,10 @@ def estimate_instance(
         details += f" boot_disk={disk_amount:.6f}"
     if local_amount:
         details += f" local_ssd={local_amount:.6f}"
-    return LineItem(
-        address=snap.address,
-        resource_type=snap.type,
-        side=snap.side,
+    return _line(
+        snap,
+        cfg,
         amount=total_max,
-        currency=cfg.currency,
-        period=cfg.period,
         details=details,
         warnings=warnings,
         amount_min=total_min,
@@ -620,28 +652,17 @@ def estimate_snapshot(
     size = _size_gib(snap.values)
     if size is None:
         # Snapshots may only expose size in status; treat as unknown if missing.
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
+        return _line(
+            snap,
+            cfg,
             amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
             details="missing snapshot size",
             unknown=True,
             warnings=[f"{snap.address}: missing size; cannot price snapshot"],
         )
     rate = catalog.money(catalog.raw.get("disk_snapshot_gib_month"), cfg.currency) or 0.0
     amount = scale_monthly(rate * size, cfg.period, month_hours=catalog.month_hours)
-    return LineItem(
-        address=snap.address,
-        resource_type=snap.type,
-        side=snap.side,
-        amount=amount,
-        currency=cfg.currency,
-        period=cfg.period,
-        details=f"snapshot size_gib={size}",
-    )
+    return _line(snap, cfg, amount=amount, details=f"snapshot size_gib={size}")
 
 
 def estimate_filesystem(
@@ -653,13 +674,10 @@ def estimate_filesystem(
     size = _size_gib(snap.values)
     fs_type = str(snap.values.get("type") or "NETWORK_SSD")
     if size is None:
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
+        return _line(
+            snap,
+            cfg,
             amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
             details="missing filesystem size",
             unknown=True,
             warnings=[f"{snap.address}: missing size_* field"],
@@ -668,27 +686,16 @@ def estimate_filesystem(
     rate = catalog.money(prices, cfg.currency) if prices else None
     if rate is None:
         note = (prices or {}).get("note", "no public list price")
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
+        return _line(
+            snap,
+            cfg,
             amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
             details=f"filesystem type {fs_type}: {note}",
             unknown=True,
             warnings=[f"{snap.address}: no price for filesystem type {fs_type} ({note})"],
         )
     amount = scale_monthly(rate * size, cfg.period, month_hours=catalog.month_hours)
-    return LineItem(
-        address=snap.address,
-        resource_type=snap.type,
-        side=snap.side,
-        amount=amount,
-        currency=cfg.currency,
-        period=cfg.period,
-        details=f"type={fs_type} size_gib={size}",
-    )
+    return _line(snap, cfg, amount=amount, details=f"type={fs_type} size_gib={size}")
 
 
 def estimate_bucket(
@@ -723,13 +730,10 @@ def estimate_bucket(
     storage_prices = obj.get("storage_gib_month", {}).get(storage_key)
     storage_rate = catalog.money(storage_prices, cfg.currency) if storage_prices else None
     if storage_rate is None and stored > 0:
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
+        return _line(
+            snap,
+            cfg,
             amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
             details=f"unpriced storage class {storage_class}",
             unknown=True,
             warnings=[f"{snap.address}: no price for storage class {storage_class}"],
@@ -766,13 +770,10 @@ def estimate_bucket(
         egress_cost = egress * e_rate
 
     amount = storage_cost + request_cost + egress_cost
-    return LineItem(
-        address=snap.address,
-        resource_type=snap.type,
-        side=snap.side,
+    return _line(
+        snap,
+        cfg,
         amount=amount,
-        currency=cfg.currency,
-        period=cfg.period,
         details=(
             f"class={storage_class} stored_gib={stored} "
             f"reqA={class_a} reqB={class_b} egress_gib={egress}"
@@ -788,13 +789,10 @@ def estimate_allocation(
     _usage: PlannedUsage,
 ) -> LineItem:
     # VPC is free of charge per docs; public/private allocations included.
-    return LineItem(
-        address=snap.address,
-        resource_type=snap.type,
-        side=snap.side,
+    return _line(
+        snap,
+        cfg,
         amount=0.0,
-        currency=cfg.currency,
-        period=cfg.period,
         details="VPC allocations are free per Nebius VPC pricing",
     )
 
@@ -831,13 +829,10 @@ def estimate_postgresql(
         disk_gib = _size_gib(values)
 
     if not preset:
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
+        return _line(
+            snap,
+            cfg,
             amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
             details="postgresql cluster missing preset; cannot estimate hosts",
             unknown=True,
             warnings=[f"{snap.address}: no preset found for PostgreSQL hosts"],
@@ -845,13 +840,10 @@ def estimate_postgresql(
     try:
         _gpus, vcpus, ram_gib = parse_preset(str(preset))
     except ValueError as exc:
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
+        return _line(
+            snap,
+            cfg,
             amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
             details=str(exc),
             unknown=True,
             warnings=[f"{snap.address}: {exc}"],
@@ -873,13 +865,10 @@ def estimate_postgresql(
     else:
         warnings.append(f"{snap.address}: no disk size; storage portion omitted")
 
-    return LineItem(
-        address=snap.address,
-        resource_type=snap.type,
-        side=snap.side,
+    return _line(
+        snap,
+        cfg,
         amount=compute_amount + disk_amount,
-        currency=cfg.currency,
-        period=cfg.period,
         details=f"preset={preset} hosts={host_count} platform={platform}",
         warnings=warnings,
     )
@@ -896,13 +885,10 @@ def estimate_mlflow(
     size_name = str(snap.values.get("size") or snap.values.get("cluster_size") or "medium").lower()
     size = sizes.get(size_name)
     if not size:
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
+        return _line(
+            snap,
+            cfg,
             amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
             details=f"unknown mlflow size {size_name}",
             unknown=True,
             warnings=[f"{snap.address}: unknown MLflow size {size_name}"],
@@ -912,13 +898,10 @@ def estimate_mlflow(
         size["ram_gib"]
     )
     amount = scale_hourly(hourly, cfg.period, month_hours=catalog.month_hours)
-    return LineItem(
-        address=snap.address,
-        resource_type=snap.type,
-        side=snap.side,
+    return _line(
+        snap,
+        cfg,
         amount=amount,
-        currency=cfg.currency,
-        period=cfg.period,
         details=f"size={size_name} vcpu={size['vcpu']} ram_gib={size['ram_gib']}",
     )
 
@@ -929,13 +912,10 @@ def estimate_free(
     cfg: EstimateConfig,
     _usage: PlannedUsage,
 ) -> LineItem:
-    return LineItem(
-        address=snap.address,
-        resource_type=snap.type,
-        side=snap.side,
+    return _line(
+        snap,
+        cfg,
         amount=0.0,
-        currency=cfg.currency,
-        period=cfg.period,
         details="free / not billed separately per public pricing",
     )
 
@@ -1002,18 +982,6 @@ def _node_group_count_range(
     return 0, 0, [f"{address}: missing fixed_node_count / autoscaling; node count assumed 0"]
 
 
-def _node_group_count(
-    values: dict[str, Any],
-    usage: PlannedUsage,
-    address: str,
-    name: str,
-) -> tuple[int, list[str]]:
-    """Backward-compatible single count: pessimistic (max) node count."""
-    count_min, count_max, warnings = _node_group_count_range(values, usage, address, name)
-    del count_min
-    return count_max, warnings
-
-
 def estimate_node_group(
     snap: ResourceSnapshot,
     catalog: PriceCatalog,
@@ -1033,13 +1001,10 @@ def estimate_node_group(
     count_min, count_max, warnings = _node_group_count_range(values, usage, snap.address, snap.name)
 
     if not platform:
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
+        return _line(
+            snap,
+            cfg,
             amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
             details="node group missing template.resources.platform",
             unknown=True,
             warnings=[f"{snap.address}: missing template.resources.platform"],
@@ -1055,13 +1020,10 @@ def estimate_node_group(
     )
     warnings.extend(parts.warnings)
     if parts.unknown:
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
+        return _line(
+            snap,
+            cfg,
             amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
             details=parts.details,
             unknown=True,
             warnings=warnings,
@@ -1104,13 +1066,10 @@ def estimate_node_group(
         f"per_node_compute_max={per_node_compute_max:.6f} "
         f"per_node_disk={per_node_disk:.6f}"
     )
-    return LineItem(
-        address=snap.address,
-        resource_type=snap.type,
-        side=snap.side,
+    return _line(
+        snap,
+        cfg,
         amount=amount_max,
-        currency=cfg.currency,
-        period=cfg.period,
         details=details,
         warnings=warnings,
         amount_min=amount_min,
@@ -1220,13 +1179,10 @@ def estimate_ai_endpoint(
     warnings.extend(map_warnings)
 
     if not platform:
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
+        return _line(
+            snap,
+            cfg,
             amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
             details="serverless endpoint missing platform/preset/gpu/cpu",
             unknown=True,
             warnings=[f"{snap.address}: cannot resolve Compute platform for endpoint"],
@@ -1234,13 +1190,10 @@ def estimate_ai_endpoint(
 
     # CPU selector without RAM/preset cannot be priced.
     if vcpus is not None and ram_gib == 0 and not preset:
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
+        return _line(
+            snap,
+            cfg,
             amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
             details="cpu selector without preset (RAM unknown)",
             unknown=True,
             warnings=warnings
@@ -1254,49 +1207,30 @@ def estimate_ai_endpoint(
     ):
         preemptible = True
 
-    if preset:
-        parts = _price_compute(
-            address=snap.address,
-            platform=platform,
-            preset=preset,
-            preemptible=preemptible,
-            catalog=catalog,
-            cfg=cfg,
-        )
-    elif gpus is not None:
-        parts = _price_compute(
-            address=snap.address,
-            platform=platform,
-            preset=preset,
-            preemptible=preemptible,
-            catalog=catalog,
-            cfg=cfg,
-            gpus=gpus,
-            vcpus=0,
-            ram_gib=0,
-        )
-    else:
-        parts = _price_compute(
-            address=snap.address,
-            platform=platform,
-            preset=preset,
-            preemptible=preemptible,
-            catalog=catalog,
-            cfg=cfg,
-            gpus=gpus,
-            vcpus=vcpus,
-            ram_gib=ram_gib,
-        )
+    # GPU selector without preset: bill GPU-only hours. Otherwise pass through
+    # optional vcpu/ram overrides (or let _price_compute parse the preset).
+    price_kwargs: dict[str, Any] = {}
+    if not preset and gpus is not None:
+        price_kwargs = {"gpus": gpus, "vcpus": 0, "ram_gib": 0}
+    elif not preset:
+        price_kwargs = {"gpus": gpus, "vcpus": vcpus, "ram_gib": ram_gib}
+
+    parts = _price_compute(
+        address=snap.address,
+        platform=platform,
+        preset=preset,
+        preemptible=preemptible,
+        catalog=catalog,
+        cfg=cfg,
+        **price_kwargs,
+    )
 
     warnings.extend(parts.warnings)
     if parts.unknown:
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
+        return _line(
+            snap,
+            cfg,
             amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
             details=parts.details,
             unknown=True,
             warnings=warnings,
@@ -1335,13 +1269,10 @@ def estimate_ai_endpoint(
         f"{parts.details} running_fraction={running_fraction} "
         f"compute_min={compute_min:.6f} compute_max={compute_max:.6f} disk={disk_amount:.6f}"
     )
-    return LineItem(
-        address=snap.address,
-        resource_type=snap.type,
-        side=snap.side,
+    return _line(
+        snap,
+        cfg,
         amount=amount_max,
-        currency=cfg.currency,
-        period=cfg.period,
         details=details,
         warnings=warnings,
         amount_min=amount_min,
@@ -1356,13 +1287,10 @@ def estimate_unknown(
     _usage: PlannedUsage,
 ) -> LineItem:
     hint = catalog.raw.get("unsupported_priced_elsewhere", {}).get(snap.type, "no estimator")
-    return LineItem(
-        address=snap.address,
-        resource_type=snap.type,
-        side=snap.side,
+    return _line(
+        snap,
+        cfg,
         amount=0.0,
-        currency=cfg.currency,
-        period=cfg.period,
         details=str(hint),
         unknown=True,
         warnings=[f"{snap.address}: {snap.type} not priced ({hint})"],
@@ -1397,16 +1325,13 @@ def estimate_resource(
 
 
 def _sum_items_min(items: list[LineItem]) -> float:
-    return sum(i.amount_min if i.amount_min is not None else i.amount for i in items)
+    # LineItem.__post_init__ always materializes amount_min.
+    return sum(i.amount_min or 0.0 for i in items)
 
 
 def _sum_items_max(items: list[LineItem]) -> float:
-    return sum(i.amount_max if i.amount_max is not None else i.amount for i in items)
-
-
-def _sum_items(items: list[LineItem]) -> float:
-    """Sum pessimistic (max) amounts."""
-    return _sum_items_max(items)
+    # LineItem.__post_init__ always materializes amount_max; amount == amount_max.
+    return sum(i.amount_max or 0.0 for i in items)
 
 
 def run_estimate(
@@ -1418,14 +1343,9 @@ def run_estimate(
     before_items = [estimate_resource(s, catalog, cfg, usage) for s in doc.resources_before]
     after_items = [estimate_resource(s, catalog, cfg, usage) for s in doc.resources_after]
 
-    # Mode handling: for state / total, before is empty unless plan.
-    if cfg.mode == "total":
-        # Total of after only (or planned_values)
+    # State / total: report after-only totals (no plan delta).
+    if cfg.mode in {"total", "state"}:
         before_items = []
-    elif cfg.mode == "state":
-        before_items = []
-    elif cfg.mode == "plan":
-        pass  # keep both
 
     before_total_min = _sum_items_min(before_items)
     before_total_max = _sum_items_max(before_items)
@@ -1442,20 +1362,6 @@ def run_estimate(
         if item.unknown:
             unknown.append(item.address)
 
-    # De-dupe while preserving order
-    seen_w: set[str] = set()
-    uniq_w: list[str] = []
-    for w in warnings:
-        if w not in seen_w:
-            seen_w.add(w)
-            uniq_w.append(w)
-    seen_u: set[str] = set()
-    uniq_u: list[str] = []
-    for u in unknown:
-        if u not in seen_u:
-            seen_u.add(u)
-            uniq_u.append(u)
-
     return EstimateResult(
         period=cfg.period,
         currency=cfg.currency,
@@ -1467,8 +1373,8 @@ def run_estimate(
         delta_max=delta_max,
         before_items=before_items,
         after_items=after_items,
-        unknown_resources=uniq_u,
-        warnings=uniq_w,
+        unknown_resources=_uniq(unknown),
+        warnings=_uniq(warnings),
         catalog_path=str(catalog.path),
         document_kind=doc.kind,
     )

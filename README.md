@@ -38,6 +38,13 @@ ruff check src tests scripts
 ruff format --check src tests scripts
 ```
 
+Or via Make:
+
+```bash
+make check          # pytest + ruff
+make cov            # pytest with coverage (pytest-cov in [dev])
+```
+
 Or as a single gate:
 
 ```bash

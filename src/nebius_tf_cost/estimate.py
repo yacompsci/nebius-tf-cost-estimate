@@ -130,7 +130,11 @@ def _size_gib(values: dict[str, Any]) -> float | None:
 
 
 def _is_preemptible(values: dict[str, Any]) -> bool:
-    if values.get("preemptible") is True:
+    preempt = values.get("preemptible")
+    if preempt is True:
+        return True
+    # Terraform provider uses a nested block: preemptible = { on_preemption = "STOP" }
+    if isinstance(preempt, dict):
         return True
     if values.get("follows_spot_price"):
         return True
@@ -202,7 +206,7 @@ def _on_demand_hourly(
     return hourly, warnings, False
 
 
-def _preemptible_floor_hourly(
+def _preemptible_rates_hourly(
     platform_prices: dict[str, Any],
     *,
     billing: str | None,
@@ -210,8 +214,12 @@ def _preemptible_floor_hourly(
     vcpus: int,
     ram_gib: int,
     ck: str,
-) -> tuple[float | None, str | None]:
-    """Return (hourly_or_None, note) for published spot/preemptible floor rates."""
+) -> tuple[float | None, str, str | None]:
+    """Return (hourly_or_None, kind, note) for published spot/preemptible rates.
+
+    ``kind`` is ``fixed`` (exact published preemptible component rates), ``floor``
+    (dynamic spot minimum from compute pricing "From $X" lines), or ``none``.
+    """
     fixed = platform_prices.get("preemptible")
     if isinstance(fixed, dict):
         if billing == "gpu_only":
@@ -222,11 +230,15 @@ def _preemptible_floor_hourly(
                 + float(fixed.get(f"cpu_hour_{ck}", 0) or 0) * vcpus
                 + float(fixed.get(f"ram_gib_hour_{ck}", 0) or 0) * ram_gib
             )
-        return hourly, "published preemptible rates"
+        return hourly, "fixed", "published preemptible rates"
     floor = platform_prices.get(f"preemptible_floor_{ck}")
     if floor is not None and billing == "gpu_only":
-        return float(floor) * max(gpus, 1 if gpus else 0), f"published floor {floor}"
-    return None, None
+        return (
+            float(floor) * max(gpus, 1 if gpus else 0),
+            "floor",
+            f"published floor {floor}",
+        )
+    return None, "none", None
 
 
 def _price_compute(
@@ -243,8 +255,18 @@ def _price_compute(
 ) -> _ComputeParts:
     """Shared GPU/CPU/RAM hourly pricing used by instances, node groups, and Serverless AI.
 
-    For preemptible/spot resources, ``hourly_min`` is the published floor (when known)
-    and ``hourly_max`` is the on-demand ceiling. Non-spot resources have min == max.
+    Preemptible/spot semantics (when rates are listed in the catalog):
+
+    * **Fixed** preemptible rates (e.g. L40S): ``min == max`` at the published
+      preemptible component rates (not on-demand).
+    * **Dynamic** spot floors (e.g. H100 "From $X"): ``min`` uses the published
+      floor; ``max`` uses on-demand as a conventional ceiling under
+      ``--preemptible-policy on_demand``. With ``floor``, both bounds use the
+      floor. Spot can exceed on-demand when following the live market without a
+      pricing-policy max — that uncapped case is not modeled as a finite max.
+
+    Platforms without a published floor or fixed preemptible table are not
+    invented: bounds fall back to on-demand with a warning.
     """
     warnings: list[str] = []
     platform_prices = catalog.platform(platform)
@@ -338,7 +360,7 @@ def _price_compute(
             details="preemptible rejected by policy",
         )
 
-    floor_hourly, floor_note = _preemptible_floor_hourly(
+    spot_hourly, spot_kind, spot_note = _preemptible_rates_hourly(
         platform_prices,
         billing=billing,
         gpus=gpus,
@@ -346,19 +368,40 @@ def _price_compute(
         ram_gib=ram_gib,
         ck=ck,
     )
-    if floor_hourly is not None:
-        # Optimistic = floor / published preemptible; pessimistic = on-demand ceiling.
-        hourly_min = min(floor_hourly, on_demand)
-        hourly_max = on_demand
-        if floor_note and "floor" in floor_note:
+    if spot_hourly is not None and spot_kind == "fixed":
+        # Exact published preemptible rates — not a dynamic market.
+        warnings.append(f"{address}: preemptible/spot; uses {spot_note} (fixed list rates)")
+        return _ComputeParts(
+            hourly_min=spot_hourly,
+            hourly_max=spot_hourly,
+            platform=platform,
+            preset=preset,
+            gpus=gpus,
+            vcpus=vcpus,
+            ram_gib=ram_gib,
+            warnings=warnings,
+            details=f"platform={platform} preset={preset}",
+        )
+
+    if spot_hourly is not None and spot_kind == "floor":
+        floor_hourly = min(spot_hourly, on_demand)
+        if cfg.preemptible_policy == "floor":
             warnings.append(
-                f"{address}: spot price is dynamic; min uses {floor_note} "
-                f"{cfg.currency}/GPU-hour, max uses on-demand"
+                f"{address}: spot price is dynamic; "
+                f"--preemptible-policy floor uses {spot_note} "
+                f"{cfg.currency}/GPU-hour for min and max"
             )
+            hourly_min = floor_hourly
+            hourly_max = floor_hourly
         else:
+            # Default on_demand: optimistic floor / pessimistic on-demand ceiling.
             warnings.append(
-                f"{address}: preemptible/spot; min uses {floor_note}, max uses on-demand"
+                f"{address}: spot price is dynamic; min uses {spot_note} "
+                f"{cfg.currency}/GPU-hour, max uses on-demand "
+                "(live spot can exceed on-demand without a pricing-policy max)"
             )
+            hourly_min = floor_hourly
+            hourly_max = on_demand
         return _ComputeParts(
             hourly_min=hourly_min,
             hourly_max=hourly_max,
@@ -371,7 +414,10 @@ def _price_compute(
             details=f"platform={platform} preset={preset}",
         )
 
-    warnings.append(f"{address}: preemptible/spot flagged; no floor rates — min=max=on-demand")
+    warnings.append(
+        f"{address}: preemptible/spot flagged; no published floor/preemptible "
+        "rates in catalog — min=max=on-demand (not inventing spot prices)"
+    )
     return _ComputeParts(
         hourly_min=on_demand,
         hourly_max=on_demand,

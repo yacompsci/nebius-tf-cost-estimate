@@ -109,7 +109,11 @@ exit codes:
         "--preemptible-policy",
         choices=["on_demand", "floor", "reject"],
         default="on_demand",
-        help="How to price preemptible/spot VMs (default: on_demand)",
+        help=(
+            "Spot/preemptible pricing: on_demand=min floor/max on-demand "
+            "(budget uses max); floor=min=max at published floor; "
+            "reject=mark unknown (default: on_demand)"
+        ),
     )
     est.add_argument("--json", action="store_true", dest="json_output", help="Emit JSON report")
     est.add_argument(

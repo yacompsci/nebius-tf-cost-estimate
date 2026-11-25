@@ -231,3 +231,72 @@ def test_minmax_equal_for_on_demand(catalog, fixtures_dir: Path) -> None:
     result = run_estimate(doc, catalog, cfg, usage)
     assert result.after_total_min == pytest.approx(result.after_total_max, rel=1e-9)
     assert result.delta_min == pytest.approx(result.delta_max, rel=1e-9)
+
+
+def test_preemptible_policy_floor_collapses_bounds(catalog, fixtures_dir: Path) -> None:
+    doc = detect_and_load(fixtures_dir / "plan_minmax.json")
+    cfg = EstimateConfig(
+        input_path=fixtures_dir / "plan_minmax.json",
+        period="hour",
+        currency="USD",
+        mode="plan",
+        preemptible_policy="floor",
+    )
+    result = run_estimate(doc, catalog, cfg, PlannedUsage())
+    spot = next(i for i in result.after_items if i.address.endswith(".spot_gpu"))
+    boot = (100 * 0.071) / 730
+    assert spot.amount_min == pytest.approx(0.79 + boot, rel=1e-6)
+    assert spot.amount_max == pytest.approx(0.79 + boot, rel=1e-6)
+    assert spot.amount == spot.amount_max
+
+
+def test_fixed_l40s_preemptible_uses_list_rates(catalog, fixtures_dir: Path) -> None:
+    """L40S has fixed published preemptible rates — min == max at those rates."""
+    doc = detect_and_load(fixtures_dir / "plan_spot_l40s.json")
+    cfg = EstimateConfig(
+        input_path=fixtures_dir / "plan_spot_l40s.json",
+        period="hour",
+        currency="USD",
+        mode="plan",
+    )
+    result = run_estimate(doc, catalog, cfg, PlannedUsage())
+    spot = next(i for i in result.after_items if i.address.endswith(".spot_l40s"))
+    # 1 GPU * 0.65 + 16 CPU * 0.006 + 64 GiB * 0.0016 = 0.65 + 0.096 + 0.1024 = 0.8484
+    compute = 0.65 + 16 * 0.006 + 64 * 0.0016
+    boot = (100 * 0.071) / 730
+    assert spot.amount_min == pytest.approx(compute + boot, rel=1e-6)
+    assert spot.amount_max == pytest.approx(compute + boot, rel=1e-6)
+    # Must not use on-demand component rates as the ceiling.
+    on_demand = 1.35 + 16 * 0.012 + 64 * 0.0032
+    assert spot.amount_max < on_demand + boot
+
+
+def test_catalog_spot_floors_match_published_docs(catalog) -> None:
+    """Floors/fixed rates must match compute pricing 'From $X' / L40S rows."""
+    platforms = catalog.raw["compute_platforms"]
+    expected_floors = {
+        "gpu-b300-sxm": 0.99,
+        "gpu-b200-sxm": 0.99,
+        "gpu-b200-sxm-a": 0.99,
+        "gpu-h200-sxm": 0.79,
+        "gpu-h100-sxm": 0.79,
+        "gpu-rtx6000": 0.79,
+        "gpu-rtx6000-a": 0.79,
+    }
+    for plat, floor in expected_floors.items():
+        assert platforms[plat]["preemptible_floor_usd"] == pytest.approx(floor)
+        assert platforms[plat]["spot_mode"] == "dynamic_floor"
+        assert platforms[plat]["preemptible_floor_ils"] == pytest.approx(round(floor * 3.1, 3))
+
+    for plat in ("gpu-l40s-a", "gpu-l40s-d"):
+        assert platforms[plat]["spot_mode"] == "fixed"
+        assert platforms[plat]["preemptible"]["gpu_hour_usd"] == pytest.approx(0.65)
+
+    # CPU platforms must not invent spot floors.
+    for plat in ("cpu-d3", "cpu-e2"):
+        assert "preemptible_floor_usd" not in platforms[plat]
+        assert "preemptible" not in platforms[plat]
+
+    sources = catalog.raw["meta"]["sources"]
+    assert "https://docs.nebius.com/signup-billing/spot-prices.md" in sources
+    assert "https://docs.nebius.com/signup-billing/pricing-policy.md" in sources

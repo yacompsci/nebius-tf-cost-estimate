@@ -57,7 +57,7 @@ python -m pytest && ruff check src tests scripts && ruff format --check src test
 | `--usage-file PATH` | YAML/JSON planned usage |
 | `--usage-metric KEY=VALUE` | Default usage overrides (repeatable) |
 | `--catalog PATH` | Override vendored `prices.json` |
-| `--preemptible-policy on_demand\|floor\|reject` | Spot/preemptible pricing policy |
+| `--preemptible-policy on_demand\|floor\|reject` | Spot: `on_demand` → min floor / max on-demand; `floor` → both at published floor; `reject` → unknown |
 | `--json` | Machine-readable report |
 | `--include-zero` | Show free/zero line items |
 
@@ -97,13 +97,15 @@ Covered estimators include Compute instances/disks/snapshots/filesystems, Object
 
 ```bash
 python scripts/refresh_catalog.py
+python scripts/refresh_catalog.py --spot-snapshot   # compare live public spot API to catalog floors
 ```
 
-Edit `data/prices.json` (and mirror `src/nebius_tf_cost/data/prices.json`), then re-run tests. Do not commit credentials — this tool never needs them.
+Edit `data/prices.json` (and mirror `src/nebius_tf_cost/data/prices.json`) from the published docs floors / fixed preemptible rows — do not invent rates for platforms absent from those tables. Re-run tests. Do not commit credentials — this tool never needs them (the spot snapshot API is public and unauthenticated).
 
 ## Min vs max
 
-- **min** — optimistic (spot floors / known rates; autoscaling `min_node_count`)
-- **max** — pessimistic (on-demand spot ceiling; autoscaling `max_node_count`); budget uses this
+- **min** — optimistic (published spot floors / fixed preemptible rates; autoscaling `min_node_count`)
+- **max** — pessimistic (on-demand ceiling for dynamic spot under `--preemptible-policy on_demand`; autoscaling `max_node_count`); budget uses this
+- Fixed preemptible platforms (L40S) use published preemptible list rates for both bounds
 
 See [ASSUMPTIONS.md](ASSUMPTIONS.md) for full semantics.

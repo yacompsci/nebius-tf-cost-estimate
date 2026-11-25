@@ -1,7 +1,7 @@
 {
   "meta": {
     "currency_default": "USD",
-    "fetched_at": "2026-11-25T20:51:55Z",
+    "fetched_at": "2026-11-25T21:38:41Z",
     "month_hours": 730,
     "year_hours": 8760,
     "sources": [
@@ -18,11 +18,18 @@
       "https://docs.nebius.com/observability/resources/pricing.md",
       "https://docs.nebius.com/slurm-soperator/managed-soperator/resources/pricing.md",
       "https://docs.nebius.com/compute/virtual-machines/types.md",
-      "https://docs.nebius.com/compute/storage/types.md"
+      "https://docs.nebius.com/compute/storage/types.md",
+      "https://docs.nebius.com/signup-billing/spot-prices.md",
+      "https://docs.nebius.com/signup-billing/pricing-policy.md",
+      "https://docs.nebius.com/compute/virtual-machines/preemptible.md",
+      "https://nebius.com/spot-prices"
     ],
     "notes": [
       "Prices are published list rates without taxes/VAT.",
-      "Spot/preemptible GPU prices for many platforms are dynamic; catalog stores on-demand rates and optional floor hints.",
+      "Dynamic spot floors (preemptible_floor_*) come from compute pricing 'From $X' lines for GPU platforms with market-driven spot.",
+      "Fixed preemptible component rates (preemptible{}) come from compute pricing for L40S; not dynamic spot.",
+      "Live spot prices (public SpotPriceService API / nebius.com/spot-prices) change often and are not vendored as floors \u2014 refresh_catalog.py can print a snapshot for comparison.",
+      "Do not invent spot floors for platforms absent from the published tables.",
       "NETWORK_HDD, WEKA, and VAST have no public list price in compute pricing as of catalog fetch \u2014 estimators emit unknown warnings.",
       "Serverless AI and MK8s nodes bill as Compute; Observability is free while in preview.",
       "Refresh with: python scripts/refresh_catalog.py (manual review recommended)."
@@ -38,49 +45,56 @@
       "gpu_hour_usd": 9.5,
       "gpu_hour_ils": 29.45,
       "preemptible_floor_usd": 0.99,
-      "preemptible_floor_ils": 3.069
+      "preemptible_floor_ils": 3.069,
+      "spot_mode": "dynamic_floor"
     },
     "gpu-b200-sxm": {
       "billing": "gpu_only",
       "gpu_hour_usd": 8.5,
       "gpu_hour_ils": 26.35,
       "preemptible_floor_usd": 0.99,
-      "preemptible_floor_ils": 3.069
+      "preemptible_floor_ils": 3.069,
+      "spot_mode": "dynamic_floor"
     },
     "gpu-b200-sxm-a": {
       "billing": "gpu_only",
       "gpu_hour_usd": 8.5,
       "gpu_hour_ils": 26.35,
       "preemptible_floor_usd": 0.99,
-      "preemptible_floor_ils": 3.069
+      "preemptible_floor_ils": 3.069,
+      "spot_mode": "dynamic_floor"
     },
     "gpu-h200-sxm": {
       "billing": "gpu_only",
       "gpu_hour_usd": 5.4,
       "gpu_hour_ils": 16.74,
       "preemptible_floor_usd": 0.79,
-      "preemptible_floor_ils": 2.449
+      "preemptible_floor_ils": 2.449,
+      "spot_mode": "dynamic_floor"
     },
     "gpu-h100-sxm": {
       "billing": "gpu_only",
       "gpu_hour_usd": 4.5,
       "gpu_hour_ils": 13.95,
       "preemptible_floor_usd": 0.79,
-      "preemptible_floor_ils": 2.449
+      "preemptible_floor_ils": 2.449,
+      "spot_mode": "dynamic_floor"
     },
     "gpu-rtx6000": {
       "billing": "gpu_only",
       "gpu_hour_usd": 1.8,
       "gpu_hour_ils": 5.58,
       "preemptible_floor_usd": 0.79,
-      "preemptible_floor_ils": 2.449
+      "preemptible_floor_ils": 2.449,
+      "spot_mode": "dynamic_floor"
     },
     "gpu-rtx6000-a": {
       "billing": "gpu_only",
       "gpu_hour_usd": 1.8,
       "gpu_hour_ils": 5.58,
       "preemptible_floor_usd": 0.79,
-      "preemptible_floor_ils": 2.449
+      "preemptible_floor_ils": 2.449,
+      "spot_mode": "dynamic_floor"
     },
     "gpu-l40s-a": {
       "billing": "components",
@@ -97,7 +111,8 @@
         "gpu_hour_ils": 2.015,
         "cpu_hour_ils": 0.0186,
         "ram_gib_hour_ils": 0.00496
-      }
+      },
+      "spot_mode": "fixed"
     },
     "gpu-l40s-d": {
       "billing": "components",
@@ -114,7 +129,8 @@
         "gpu_hour_ils": 2.015,
         "cpu_hour_ils": 0.0155,
         "ram_gib_hour_ils": 0.00496
-      }
+      },
+      "spot_mode": "fixed"
     },
     "cpu-d3": {
       "billing": "components",
@@ -322,7 +338,9 @@
     "WEKA": "Shared filesystem type; no public list price",
     "VAST": "Shared filesystem type; no public list price",
     "GB200/GB300": "NVL instance group types; no public per-GPU list price in compute pricing page",
-    "Object Storage transfer volume": "Transfer resource itself is free of a service fee; egress/storage billed on buckets via usage metrics"
+    "Object Storage transfer volume": "Transfer resource itself is free of a service fee; egress/storage billed on buckets via usage metrics",
+    "spot_live_market": "Current per-region spot SKU prices are dynamic via public API; catalog stores published floors/fixed rates only, not live quotes",
+    "spot_platforms_without_published_floor": "GPU platforms not listed with 'From $X' or fixed preemptible rows in compute pricing have no inventable floor (e.g. GB200/GB300)"
   },
   "usage_metrics": {
     "stored_gib": "Object Storage average stored GiB for the estimate window",

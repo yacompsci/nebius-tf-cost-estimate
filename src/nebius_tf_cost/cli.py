@@ -36,8 +36,8 @@ examples:
   nebius-tf-cost estimate --plan plan.json --usage-metric stored_gib=100 --currency USD
 
 exit codes:
-  0  success (and budget OK, or warn-only exceed)
-  2  budget exceeded with --on-exceed fail
+  0  success (and max within budget, or warn-only exceed)
+  2  max estimate exceeds budget with --on-exceed fail
   64 usage / flag error
   65 bad plan/state/catalog/usage data
   70 internal error
@@ -70,13 +70,18 @@ exit codes:
         "--on-exceed",
         choices=["warn", "fail"],
         default="warn",
-        help="When estimate exceeds budget: warn (exit 0) or fail (exit 2)",
+        help=(
+            "When the max (pessimistic) estimate exceeds budget: warn (exit 0) or fail (exit 2)"
+        ),
     )
     est.add_argument(
         "--budget-compare",
         choices=["after", "delta", "abs_delta"],
         default="after",
-        help="What to compare to budget: after total, plan delta, or abs(delta)",
+        help=(
+            "What max figure to compare to budget: after_total_max, delta_max, "
+            "or max(|delta_min|, |delta_max|)"
+        ),
     )
     est.add_argument(
         "--usage-file",
@@ -135,30 +140,47 @@ def _resolve_mode(cfg_mode: str, doc_kind: str) -> str:
     return "total"
 
 
+def _format_line_amount(item: object) -> str:
+    amin = getattr(item, "amount_min", None)
+    amax = getattr(item, "amount_max", None)
+    amount = getattr(item, "amount", 0.0)
+    if amin is None or amax is None or amin == amax:
+        return f"{amount:12.6f}"
+    return f"{amin:12.6f}..{amax:.6f}"
+
+
 def format_text(result: EstimateResult, include_zero: bool = False) -> str:
     lines: list[str] = []
     lines.append(f"Nebius TF cost estimate ({result.document_kind})")
     lines.append(f"Catalog: {result.catalog_path}")
     lines.append(f"Period:  {result.period}   Currency: {result.currency}")
     lines.append("")
-    lines.append(f"Before:  {result.before_total:.6f} {result.currency}")
-    lines.append(f"After:   {result.after_total:.6f} {result.currency}")
-    lines.append(f"Delta:   {result.delta:.6f} {result.currency}")
+    lines.append(
+        f"Before:  min={result.before_total_min:.6f}  max={result.before_total_max:.6f} "
+        f"{result.currency}"
+    )
+    lines.append(
+        f"After:   min={result.after_total_min:.6f}  max={result.after_total_max:.6f} "
+        f"{result.currency}"
+    )
+    lines.append(
+        f"Delta:   min={result.delta_min:.6f}  max={result.delta_max:.6f} {result.currency}"
+    )
     lines.append("")
     lines.append("Line items (after):")
     for item in result.after_items:
-        if not include_zero and item.amount == 0 and not item.unknown:
+        if not include_zero and item.amount_max == 0 and not item.unknown:
             continue
         flag = " ?" if item.unknown else ""
-        lines.append(f"  {item.amount:12.6f}  {item.address}{flag}  ({item.details})")
+        lines.append(f"  {_format_line_amount(item)}  {item.address}{flag}  ({item.details})")
     if result.before_items:
         lines.append("")
         lines.append("Line items (before):")
         for item in result.before_items:
-            if not include_zero and item.amount == 0 and not item.unknown:
+            if not include_zero and item.amount_max == 0 and not item.unknown:
                 continue
             flag = " ?" if item.unknown else ""
-            lines.append(f"  {item.amount:12.6f}  {item.address}{flag}  ({item.details})")
+            lines.append(f"  {_format_line_amount(item)}  {item.address}{flag}  ({item.details})")
     if result.warnings:
         lines.append("")
         lines.append("Warnings:")
@@ -176,9 +198,15 @@ def result_to_dict(result: EstimateResult) -> dict:
     return {
         "period": result.period,
         "currency": result.currency,
-        "before_total": result.before_total,
-        "after_total": result.after_total,
-        "delta": result.delta,
+        "before_total": result.before_total_max,
+        "after_total": result.after_total_max,
+        "delta": result.delta_max,
+        "before_total_min": result.before_total_min,
+        "before_total_max": result.before_total_max,
+        "after_total_min": result.after_total_min,
+        "after_total_max": result.after_total_max,
+        "delta_min": result.delta_min,
+        "delta_max": result.delta_max,
         "catalog_path": result.catalog_path,
         "document_kind": result.document_kind,
         "unknown_resources": result.unknown_resources,

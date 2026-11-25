@@ -187,3 +187,47 @@ def test_ai_gpu_selector_mapping(catalog, fixtures_dir: Path) -> None:
     item = estimate_ai_endpoint(snap, catalog, cfg, PlannedUsage())
     assert item.unknown is False
     assert item.amount == pytest.approx(2 * 4.5 + (50 * 0.071) / 730, rel=1e-6)
+    assert item.amount_min == item.amount_max
+
+
+def test_minmax_spot_and_autoscaling(catalog, fixtures_dir: Path) -> None:
+    doc = detect_and_load(fixtures_dir / "plan_minmax.json")
+    cfg = EstimateConfig(
+        input_path=fixtures_dir / "plan_minmax.json",
+        period="hour",
+        currency="USD",
+        mode="plan",
+    )
+    result = run_estimate(doc, catalog, cfg, PlannedUsage())
+
+    spot = next(i for i in result.after_items if i.address.endswith(".spot_gpu"))
+    boot = (100 * 0.071) / 730
+    # H100 floor 0.79, on-demand 4.5
+    assert spot.amount_min == pytest.approx(0.79 + boot, rel=1e-6)
+    assert spot.amount_max == pytest.approx(4.5 + boot, rel=1e-6)
+    assert spot.amount == spot.amount_max
+
+    nodes = next(i for i in result.after_items if i.address.endswith(".autoscale"))
+    per_node = 0.06 + (64 * 0.071) / 730
+    assert nodes.amount_min == pytest.approx(1 * per_node, rel=1e-6)
+    assert nodes.amount_max == pytest.approx(4 * per_node, rel=1e-6)
+
+    assert result.after_total_min == pytest.approx(spot.amount_min + nodes.amount_min, rel=1e-6)
+    assert result.after_total_max == pytest.approx(spot.amount_max + nodes.amount_max, rel=1e-6)
+    assert result.after_total == result.after_total_max
+    assert result.delta_min == result.after_total_min  # before empty
+    assert result.delta_max == result.after_total_max
+
+
+def test_minmax_equal_for_on_demand(catalog, fixtures_dir: Path) -> None:
+    doc = detect_and_load(fixtures_dir / "plan_create.json")
+    cfg = EstimateConfig(
+        input_path=fixtures_dir / "plan_create.json",
+        period="month",
+        currency="USD",
+        mode="plan",
+    )
+    usage = load_usage(fixtures_dir / "usage.yaml")
+    result = run_estimate(doc, catalog, cfg, usage)
+    assert result.after_total_min == pytest.approx(result.after_total_max, rel=1e-9)
+    assert result.delta_min == pytest.approx(result.delta_max, rel=1e-9)

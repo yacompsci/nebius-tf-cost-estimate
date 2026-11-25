@@ -35,6 +35,8 @@ def test_cli_estimate_ok(fixtures_dir: Path, capsys) -> None:
     assert code == int(ExitCode.OK)
     out = capsys.readouterr().out
     assert "After:" in out
+    assert "min=" in out
+    assert "max=" in out
     assert "Delta:" in out
 
 
@@ -93,6 +95,67 @@ def test_cli_json(fixtures_dir: Path, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["currency"] == "USD"
     assert payload["after_total"] > 0
+    assert payload["after_total_max"] == payload["after_total"]
+    assert "after_total_min" in payload
+    assert "delta_min" in payload
+    assert "delta_max" in payload
+
+
+def test_cli_budget_gates_on_max(fixtures_dir: Path, capsys) -> None:
+    """Budget between min and max of a spot+autoscale plan must fail on max."""
+    # First get the range without budget.
+    code = main(
+        [
+            "estimate",
+            "--plan",
+            str(fixtures_dir / "plan_minmax.json"),
+            "--catalog",
+            CATALOG,
+            "--period",
+            "hour",
+            "--json",
+        ]
+    )
+    assert code == int(ExitCode.OK)
+    payload = json.loads(capsys.readouterr().out)
+    amin = payload["after_total_min"]
+    amax = payload["after_total_max"]
+    assert amin < amax
+    mid = (amin + amax) / 2
+
+    code_fail = main(
+        [
+            "estimate",
+            "--plan",
+            str(fixtures_dir / "plan_minmax.json"),
+            "--catalog",
+            CATALOG,
+            "--period",
+            "hour",
+            "--budget",
+            str(mid),
+            "--on-exceed",
+            "fail",
+        ]
+    )
+    assert code_fail == int(ExitCode.BUDGET_EXCEEDED)
+
+    code_ok = main(
+        [
+            "estimate",
+            "--plan",
+            str(fixtures_dir / "plan_minmax.json"),
+            "--catalog",
+            CATALOG,
+            "--period",
+            "hour",
+            "--budget",
+            str(amax + 1),
+            "--on-exceed",
+            "fail",
+        ]
+    )
+    assert code_ok == int(ExitCode.OK)
 
 
 def test_cli_missing_file() -> None:

@@ -115,6 +115,18 @@ python scripts/refresh_catalog.py --spot-snapshot   # compare live public spot A
 
 Edit `data/prices.json` (and mirror `src/nebius_tf_cost/data/prices.json`) from the published docs floors / fixed preemptible rows — do not invent rates for platforms absent from those tables. Re-run tests. Do not commit credentials — this tool never needs them (the spot snapshot API is public and unauthenticated).
 
+## Discovering new provider types
+
+Weekly GitHub Actions workflow [`.github/workflows/discover-uncovered-types.yml`](.github/workflows/discover-uncovered-types.yml) (also `workflow_dispatch`) inventories Nebius Terraform provider resource types from the public [provider docs tree](https://github.com/nebius/terraform-provider-nebius/tree/main/docs/resources) (GitHub Contents API — no secrets), diffs them against `estimate.ESTIMATORS` and catalog `free_resource_types`, and opens or updates GitHub issues for newly uncovered types.
+
+- Issue title convention: `feature: cover nebius_<type>` (deduped by that title / type name among existing issues)
+- Label: `feature` (created if missing)
+- Issues are coverage feature requests only — they do **not** invent prices
+
+```bash
+python scripts/discover_uncovered_types.py --dry-run --repo owner/nebius-tf-cost-estimate
+```
+
 ## Min vs max
 
 - **min** — optimistic (published spot floors / fixed preemptible rates; autoscaling `min_node_count`)

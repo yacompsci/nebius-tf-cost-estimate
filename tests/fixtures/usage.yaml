@@ -1,0 +1,8 @@
+defaults:
+  stored_gib: 0
+resources:
+  nebius_storage_v1_bucket.datasets:
+    stored_gib: 1024
+    class_a_requests: 10000
+    class_b_requests: 50000
+    egress_gib: 100

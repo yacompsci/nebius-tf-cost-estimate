@@ -1,0 +1,50 @@
+{
+  "format_version": "1.0",
+  "terraform_version": "1.9.0",
+  "values": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "nebius_compute_v1_instance.gpu",
+          "mode": "managed",
+          "type": "nebius_compute_v1_instance",
+          "name": "gpu",
+          "provider_name": "registry.terraform.io/nebius/nebius",
+          "instances": [
+            {
+              "attributes": {
+                "name": "gpu",
+                "resources": {
+                  "platform": "gpu-h100-sxm",
+                  "preset": "1gpu-16vcpu-200gb"
+                },
+                "boot_disk": {
+                  "managed_disk": {
+                    "spec": {
+                      "type": "NETWORK_SSD",
+                      "size_gibibytes": 100
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "address": "nebius_vpc_v1_subnet.main",
+          "mode": "managed",
+          "type": "nebius_vpc_v1_subnet",
+          "name": "main",
+          "provider_name": "registry.terraform.io/nebius/nebius",
+          "instances": [
+            {
+              "attributes": {
+                "name": "main"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

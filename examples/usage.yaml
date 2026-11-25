@@ -1,0 +1,17 @@
+# Planned usage for usage-based resources (Object Storage, etc.).
+# Addresses match Terraform resource addresses from plan/state JSON.
+
+defaults:
+  stored_gib: 0
+
+resources:
+  nebius_storage_v1_bucket.datasets:
+    stored_gib: 1024          # GiB stored (average over the estimate period)
+    class_a_requests: 10000   # PUT/POST/DELETE count in the period
+    class_b_requests: 50000   # GET/HEAD count in the period
+    egress_gib: 100           # GiB egress to internet / other region
+
+# Optional: match by resource name instead of full address
+# by_name:
+#   datasets:
+#     stored_gib: 512

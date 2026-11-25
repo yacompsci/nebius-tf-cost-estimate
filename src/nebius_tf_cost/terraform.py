@@ -84,6 +84,37 @@ def _snap(
     )
 
 
+_BEFORE_KINDS = frozenset({"delete", "update", "replace", "no-op"})
+_AFTER_KINDS = frozenset({"create", "update", "replace", "no-op"})
+
+
+def _append_side(
+    out: list[ResourceSnapshot],
+    *,
+    address: str,
+    rtype: str,
+    name: str,
+    provider_name: str,
+    values: Any,
+    change_kind: ChangeKind,
+    side: Side,
+) -> None:
+    """Append a snapshot when values are present and the provider/type matches."""
+    if values is None:
+        return
+    snap = _snap(
+        address=address,
+        rtype=rtype,
+        name=name,
+        provider_name=provider_name,
+        values=values or {},
+        change_kind=change_kind,
+        side=side,
+    )
+    if snap is not None:
+        out.append(snap)
+
+
 def _from_plan(raw: dict[str, Any], path: Path) -> TerraformDocument:
     before: list[ResourceSnapshot] = []
     after: list[ResourceSnapshot] = []
@@ -100,30 +131,28 @@ def _from_plan(raw: dict[str, Any], path: Path) -> TerraformDocument:
         before_vals = change_block.get("before")
         after_vals = change_block.get("after")
         # For deletes, after is null; for creates, before is null.
-        if before_vals is not None or kind in {"delete", "update", "replace", "no-op"}:
-            snap = _snap(
+        if before_vals is not None or kind in _BEFORE_KINDS:
+            _append_side(
+                before,
                 address=address,
                 rtype=rtype,
                 name=name,
                 provider_name=provider_name,
-                values=before_vals or {},
+                values=before_vals,
                 change_kind=kind,
                 side="before",
             )
-            if snap is not None and before_vals is not None:
-                before.append(snap)
-        if after_vals is not None or kind in {"create", "update", "replace", "no-op"}:
-            snap = _snap(
+        if after_vals is not None or kind in _AFTER_KINDS:
+            _append_side(
+                after,
                 address=address,
                 rtype=rtype,
                 name=name,
                 provider_name=provider_name,
-                values=after_vals or {},
+                values=after_vals,
                 change_kind=kind,
                 side="after",
             )
-            if snap is not None and after_vals is not None:
-                after.append(snap)
     return TerraformDocument(
         kind="plan",
         path=path,
@@ -131,6 +160,26 @@ def _from_plan(raw: dict[str, Any], path: Path) -> TerraformDocument:
         resources_after=after,
         raw=raw,
     )
+
+
+def _resource_instances(res: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize state ``instances`` and planned_values ``values`` shapes."""
+    instances = res.get("instances")
+    if isinstance(instances, list) and instances:
+        return [inst for inst in instances if isinstance(inst, dict)]
+    # planned_values resources expose a single ``values`` map (no instances).
+    values = res.get("values")
+    if isinstance(values, dict):
+        return [{"attributes": values}]
+    return []
+
+
+def _instance_address(base: str, index_key: Any, idx: int, instance_count: int) -> str:
+    if index_key is None and instance_count == 1:
+        return base
+    if isinstance(index_key, str):
+        return f'{base}["{index_key}"]'
+    return f"{base}[{index_key if index_key is not None else idx}]"
 
 
 def _flatten_state_module(module: dict[str, Any], prefix: str = "") -> list[ResourceSnapshot]:
@@ -144,18 +193,10 @@ def _flatten_state_module(module: dict[str, Any], prefix: str = "") -> list[Reso
         rtype = str(res.get("type") or "")
         name = str(res.get("name") or "")
         provider_name = str(res.get("provider") or res.get("provider_name") or "")
-        module_addr = prefix
-        for idx, instance in enumerate(res.get("instances") or []):
-            if not isinstance(instance, dict):
-                continue
-            index_key = instance.get("index_key")
-            base = f"{module_addr}.{rtype}.{name}" if module_addr else f"{rtype}.{name}"
-            if index_key is None and len(res.get("instances") or []) == 1:
-                address = base
-            elif isinstance(index_key, str):
-                address = f'{base}["{index_key}"]'
-            else:
-                address = f"{base}[{index_key if index_key is not None else idx}]"
+        instances = _resource_instances(res)
+        base = f"{prefix}.{rtype}.{name}" if prefix else f"{rtype}.{name}"
+        for idx, instance in enumerate(instances):
+            address = _instance_address(base, instance.get("index_key"), idx, len(instances))
             values = instance.get("attributes") or {}
             snap = _snap(
                 address=address,

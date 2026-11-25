@@ -40,6 +40,38 @@ def _as_float_map(obj: Any, *, context: str) -> dict[str, float]:
     return out
 
 
+def _parse_usage_text(text: str, *, suffix: str, path: Path) -> Any:
+    try:
+        if suffix in {".yaml", ".yml"}:
+            return yaml.safe_load(text)
+        if suffix == ".json":
+            return json.loads(text)
+        # Extensionless / unknown: try YAML first, then JSON.
+        try:
+            return yaml.safe_load(text)
+        except yaml.YAMLError:
+            return json.loads(text)
+    except (yaml.YAMLError, json.JSONDecodeError) as exc:
+        raise DataError(f"invalid usage file {path}: {exc}") from exc
+
+
+def _metrics_by_key(
+    section: Any,
+    *,
+    section_name: str,
+    key_label: str,
+) -> dict[str, dict[str, float]]:
+    data = section or {}
+    if not isinstance(data, dict):
+        raise DataError(f"{section_name} must be a mapping of {key_label} -> metrics")
+    out: dict[str, dict[str, float]] = {}
+    for key, metrics in data.items():
+        if not isinstance(key, str):
+            raise DataError(f"{section_name} keys must be strings")
+        out[key] = _as_float_map(metrics, context=f"{section_name}.{key}")
+    return out
+
+
 def load_usage(path: Path | None) -> PlannedUsage:
     """Parse a YAML or JSON planned-usage file.
 
@@ -48,7 +80,7 @@ def load_usage(path: Path | None) -> PlannedUsage:
         defaults:
           stored_gib: 100
         resources:
-          nebius_storage_v1_bucket.artifacts:
+          nebius_storage_v1_bucket.datasets:
             stored_gib: 500
             class_a_requests: 10000
             class_b_requests: 50000
@@ -65,45 +97,23 @@ def load_usage(path: Path | None) -> PlannedUsage:
     except OSError as exc:
         raise DataError(f"cannot read usage file {path}: {exc}") from exc
 
-    suffix = path.suffix.lower()
-    try:
-        if suffix in {".yaml", ".yml"}:
-            data = yaml.safe_load(text)
-        elif suffix == ".json":
-            data = json.loads(text)
-        else:
-            # Try YAML first, then JSON.
-            try:
-                data = yaml.safe_load(text)
-            except yaml.YAMLError:
-                data = json.loads(text)
-    except (yaml.YAMLError, json.JSONDecodeError) as exc:
-        raise DataError(f"invalid usage file {path}: {exc}") from exc
-
+    data = _parse_usage_text(text, suffix=path.suffix.lower(), path=path)
     if data is None:
         return PlannedUsage()
     if not isinstance(data, dict):
         raise DataError(f"usage file root must be a mapping: {path}")
 
     defaults = _as_float_map(data.get("defaults") or {}, context="defaults")
-    by_address = {}
-    resources = data.get("resources") or {}
-    if not isinstance(resources, dict):
-        raise DataError("resources must be a mapping of address -> metrics")
-    for address, metrics in resources.items():
-        if not isinstance(address, str):
-            raise DataError("resource addresses must be strings")
-        by_address[address] = _as_float_map(metrics, context=f"resources.{address}")
-
-    by_name = {}
-    names = data.get("by_name") or {}
-    if not isinstance(names, dict):
-        raise DataError("by_name must be a mapping of name -> metrics")
-    for name, metrics in names.items():
-        if not isinstance(name, str):
-            raise DataError("by_name keys must be strings")
-        by_name[name] = _as_float_map(metrics, context=f"by_name.{name}")
-
+    by_address = _metrics_by_key(
+        data.get("resources"),
+        section_name="resources",
+        key_label="address",
+    )
+    by_name = _metrics_by_key(
+        data.get("by_name"),
+        section_name="by_name",
+        key_label="name",
+    )
     return PlannedUsage(by_address=by_address, by_name=by_name, defaults=defaults)
 
 

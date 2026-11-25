@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 from collections.abc import Sequence
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import TextIO
 
@@ -15,7 +15,7 @@ from nebius_tf_cost.budget import evaluate_budget
 from nebius_tf_cost.catalog import load_catalog
 from nebius_tf_cost.config import EstimateConfig, PlannedUsage
 from nebius_tf_cost.errors import EstimateError, ExitCode
-from nebius_tf_cost.estimate import EstimateResult, run_estimate
+from nebius_tf_cost.estimate import EstimateResult, LineItem, run_estimate
 from nebius_tf_cost.terraform import detect_and_load
 from nebius_tf_cost.usage import load_usage, parse_usage_cli_overrides
 
@@ -142,13 +142,22 @@ def _resolve_mode(cfg_mode: str, doc_kind: str) -> str:
     return "total"
 
 
-def _format_line_amount(item: object) -> str:
-    amin = getattr(item, "amount_min", None)
-    amax = getattr(item, "amount_max", None)
-    amount = getattr(item, "amount", 0.0)
+def _format_line_amount(item: LineItem) -> str:
+    amin = item.amount_min
+    amax = item.amount_max
     if amin is None or amax is None or amin == amax:
-        return f"{amount:12.6f}"
+        return f"{item.amount:12.6f}"
     return f"{amin:12.6f}..{amax:.6f}"
+
+
+def _format_item_lines(items: list[LineItem], *, include_zero: bool) -> list[str]:
+    lines: list[str] = []
+    for item in items:
+        if not include_zero and item.amount_max == 0 and not item.unknown:
+            continue
+        flag = " ?" if item.unknown else ""
+        lines.append(f"  {_format_line_amount(item)}  {item.address}{flag}  ({item.details})")
+    return lines
 
 
 def format_text(result: EstimateResult, include_zero: bool = False) -> str:
@@ -170,19 +179,11 @@ def format_text(result: EstimateResult, include_zero: bool = False) -> str:
     )
     lines.append("")
     lines.append("Line items (after):")
-    for item in result.after_items:
-        if not include_zero and item.amount_max == 0 and not item.unknown:
-            continue
-        flag = " ?" if item.unknown else ""
-        lines.append(f"  {_format_line_amount(item)}  {item.address}{flag}  ({item.details})")
+    lines.extend(_format_item_lines(result.after_items, include_zero=include_zero))
     if result.before_items:
         lines.append("")
         lines.append("Line items (before):")
-        for item in result.before_items:
-            if not include_zero and item.amount_max == 0 and not item.unknown:
-                continue
-            flag = " ?" if item.unknown else ""
-            lines.append(f"  {_format_line_amount(item)}  {item.address}{flag}  ({item.details})")
+        lines.extend(_format_item_lines(result.before_items, include_zero=include_zero))
     if result.warnings:
         lines.append("")
         lines.append("Warnings:")
@@ -246,16 +247,8 @@ def cmd_estimate(args: argparse.Namespace, out: TextIO, err: TextIO) -> int:
     doc = detect_and_load(cfg.input_path)
     usage = _merge_usage(load_usage(cfg.usage_path), parse_usage_cli_overrides(args.usage_metric))
 
-    # Apply resolved mode onto a new config
-    resolved_mode = _resolve_mode(cfg.mode, doc.kind)
-    if args.plan is not None and resolved_mode == "auto":
-        resolved_mode = "plan"
-    if args.state is not None and cfg.mode == "auto":
-        resolved_mode = "total"
-
-    from dataclasses import replace
-
-    cfg = replace(cfg, mode=resolved_mode)  # type: ignore[arg-type]
+    # Resolve auto mode from document kind (--plan/--state/--input already loaded).
+    cfg = replace(cfg, mode=_resolve_mode(cfg.mode, doc.kind))  # type: ignore[arg-type]
 
     result = run_estimate(doc, catalog, cfg, usage)
     verdict = evaluate_budget(result, cfg.budget, cfg.on_exceed, compare_mode=args.budget_compare)

@@ -35,18 +35,14 @@ class EstimateConfig:
     preemptible_policy: Literal["on_demand", "floor", "reject"] = "on_demand"
 
     def validate(self) -> None:
-        if self.period not in VALID_PERIODS:
-            raise UsageError(f"period must be one of {sorted(VALID_PERIODS)}, got {self.period!r}")
-        if self.currency not in VALID_CURRENCIES:
-            raise UsageError(
-                f"currency must be one of {sorted(VALID_CURRENCIES)}, got {self.currency!r}"
-            )
-        if self.on_exceed not in VALID_ON_EXCEED:
-            raise UsageError(
-                f"on-exceed must be one of {sorted(VALID_ON_EXCEED)}, got {self.on_exceed!r}"
-            )
-        if self.mode not in VALID_MODES:
-            raise UsageError(f"mode must be one of {sorted(VALID_MODES)}, got {self.mode!r}")
+        def _one_of(name: str, value: str, allowed: frozenset[str]) -> None:
+            if value not in allowed:
+                raise UsageError(f"{name} must be one of {sorted(allowed)}, got {value!r}")
+
+        _one_of("period", self.period, VALID_PERIODS)
+        _one_of("currency", self.currency, VALID_CURRENCIES)
+        _one_of("on-exceed", self.on_exceed, VALID_ON_EXCEED)
+        _one_of("mode", self.mode, VALID_MODES)
         if self.budget is not None and self.budget < 0:
             raise UsageError("budget must be >= 0")
         if not self.input_path.exists():

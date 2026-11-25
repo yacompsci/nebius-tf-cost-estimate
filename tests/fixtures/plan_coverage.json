@@ -1,0 +1,113 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.0",
+  "resource_changes": [
+    {
+      "address": "nebius_mk8s_v1_node_group.workers",
+      "mode": "managed",
+      "type": "nebius_mk8s_v1_node_group",
+      "name": "workers",
+      "provider_name": "registry.terraform.io/nebius/nebius",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "workers",
+          "fixed_node_count": 3,
+          "template": {
+            "resources": {
+              "platform": "cpu-e2",
+              "preset": "2vcpu-8gb"
+            },
+            "boot_disk": {
+              "type": "NETWORK_SSD",
+              "size_gibibytes": 64
+            }
+          }
+        }
+      }
+    },
+    {
+      "address": "nebius_ai_v1_endpoint.api",
+      "mode": "managed",
+      "type": "nebius_ai_v1_endpoint",
+      "name": "api",
+      "provider_name": "registry.terraform.io/nebius/nebius",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "api",
+          "platform": "gpu-h100-sxm",
+          "preset": "1gpu-16vcpu-200gb",
+          "disk": {
+            "type": "NETWORK_SSD",
+            "size_gibibytes": 100
+          }
+        }
+      }
+    },
+    {
+      "address": "nebius_compute_v1_disk.hdd",
+      "mode": "managed",
+      "type": "nebius_compute_v1_disk",
+      "name": "hdd",
+      "provider_name": "registry.terraform.io/nebius/nebius",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "hdd",
+          "type": "NETWORK_HDD",
+          "size_gibibytes": 1000
+        }
+      }
+    },
+    {
+      "address": "nebius_compute_v1_filesystem.weka",
+      "mode": "managed",
+      "type": "nebius_compute_v1_filesystem",
+      "name": "weka",
+      "provider_name": "registry.terraform.io/nebius/nebius",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "weka",
+          "type": "WEKA",
+          "size_gibibytes": 10240
+        }
+      }
+    },
+    {
+      "address": "nebius_compute_v1_nvl_instance_group.gb",
+      "mode": "managed",
+      "type": "nebius_compute_v1_nvl_instance_group",
+      "name": "gb",
+      "provider_name": "registry.terraform.io/nebius/nebius",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "gb",
+          "type": "GB300",
+          "size": 2
+        }
+      }
+    },
+    {
+      "address": "nebius_mk8s_v1_cluster.main",
+      "mode": "managed",
+      "type": "nebius_mk8s_v1_cluster",
+      "name": "main",
+      "provider_name": "registry.terraform.io/nebius/nebius",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "main"
+        }
+      }
+    }
+  ]
+}

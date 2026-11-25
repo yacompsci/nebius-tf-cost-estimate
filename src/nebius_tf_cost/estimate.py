@@ -17,6 +17,24 @@ PRESET_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Serverless AI `gpu` selector → default catalog platform (region variants may differ).
+GPU_SELECTOR_TO_PLATFORM: dict[str, str] = {
+    "B300": "gpu-b300-sxm",
+    "B200": "gpu-b200-sxm",
+    "H200": "gpu-h200-sxm",
+    "H100": "gpu-h100-sxm",
+    "L40S": "gpu-l40s-a",
+    "RTX6000": "gpu-rtx6000",
+    "RTXPRO6000": "gpu-rtx6000",
+    "RTX": "gpu-rtx6000",
+}
+
+# Serverless AI `cpu` selector family → default non-GPU platform.
+CPU_FAMILY_TO_PLATFORM: dict[str, str] = {
+    "amd": "cpu-d3",
+    "intel": "cpu-e2",
+}
+
 
 @dataclass
 class LineItem:
@@ -99,64 +117,83 @@ def _cur_key(currency: str) -> str:
     return "usd" if currency.upper() == "USD" else "ils"
 
 
-def estimate_instance(
-    snap: ResourceSnapshot,
+@dataclass
+class _ComputeParts:
+    hourly: float
+    platform: str
+    preset: str
+    gpus: int
+    vcpus: int
+    ram_gib: int
+    unknown: bool = False
+    warnings: list[str] = field(default_factory=list)
+    details: str = ""
+
+
+def _price_compute(
+    *,
+    address: str,
+    platform: str,
+    preset: str,
+    preemptible: bool,
     catalog: PriceCatalog,
     cfg: EstimateConfig,
-    _usage: PlannedUsage,
-) -> LineItem:
-    values = snap.values
-    resources = values.get("resources") or {}
-    if not isinstance(resources, dict):
-        resources = {}
-    platform = str(resources.get("platform") or "")
-    preset = str(resources.get("preset") or "")
+    gpus: int | None = None,
+    vcpus: int | None = None,
+    ram_gib: int | None = None,
+) -> _ComputeParts:
+    """Shared GPU/CPU/RAM hourly pricing used by instances, node groups, and Serverless AI."""
     warnings: list[str] = []
     platform_prices = catalog.platform(platform)
     if not platform_prices:
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
-            amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
+        return _ComputeParts(
+            hourly=0.0,
+            platform=platform,
+            preset=preset,
+            gpus=gpus or 0,
+            vcpus=vcpus or 0,
+            ram_gib=ram_gib or 0,
+            unknown=True,
+            warnings=[f"{address}: no catalog entry for platform {platform!r}"],
             details=f"unknown platform {platform!r}",
-            unknown=True,
-            warnings=[f"{snap.address}: no catalog entry for platform {platform!r}"],
-        )
-    try:
-        gpus, vcpus, ram_gib = parse_preset(preset) if preset else (0, 0, 0)
-    except ValueError as exc:
-        return LineItem(
-            address=snap.address,
-            resource_type=snap.type,
-            side=snap.side,
-            amount=0.0,
-            currency=cfg.currency,
-            period=cfg.period,
-            details=str(exc),
-            unknown=True,
-            warnings=[f"{snap.address}: {exc}"],
         )
 
-    preemptible = _is_preemptible(values)
+    if gpus is None or vcpus is None or ram_gib is None:
+        try:
+            parsed_gpus, parsed_vcpus, parsed_ram = parse_preset(preset) if preset else (0, 0, 0)
+        except ValueError as exc:
+            return _ComputeParts(
+                hourly=0.0,
+                platform=platform,
+                preset=preset,
+                gpus=0,
+                vcpus=0,
+                ram_gib=0,
+                unknown=True,
+                warnings=[f"{address}: {exc}"],
+                details=str(exc),
+            )
+        gpus = parsed_gpus if gpus is None else gpus
+        vcpus = parsed_vcpus if vcpus is None else vcpus
+        ram_gib = parsed_ram if ram_gib is None else ram_gib
+
     ck = _cur_key(cfg.currency)
     hourly = 0.0
     billing = platform_prices.get("billing")
+    use_preemptible = preemptible
 
-    if preemptible:
+    if use_preemptible:
         if cfg.preemptible_policy == "reject":
-            return LineItem(
-                address=snap.address,
-                resource_type=snap.type,
-                side=snap.side,
-                amount=0.0,
-                currency=cfg.currency,
-                period=cfg.period,
-                details="preemptible rejected by policy",
+            return _ComputeParts(
+                hourly=0.0,
+                platform=platform,
+                preset=preset,
+                gpus=gpus,
+                vcpus=vcpus,
+                ram_gib=ram_gib,
                 unknown=True,
-                warnings=[f"{snap.address}: preemptible/spot instance; set --preemptible-policy"],
+                warnings=[f"{address}: preemptible/spot instance; set --preemptible-policy"],
+                details="preemptible rejected by policy",
             )
         if cfg.preemptible_policy == "floor":
             floor = platform_prices.get(f"preemptible_floor_{ck}")
@@ -170,39 +207,134 @@ def estimate_instance(
                         + float(fixed.get(f"cpu_hour_{ck}", 0) or 0) * vcpus
                         + float(fixed.get(f"ram_gib_hour_{ck}", 0) or 0) * ram_gib
                     )
-                warnings.append(f"{snap.address}: using published preemptible rates")
+                warnings.append(f"{address}: using published preemptible rates")
             elif floor is not None and billing == "gpu_only":
                 hourly = float(floor) * max(gpus, 1 if gpus else 0)
                 warnings.append(
-                    f"{snap.address}: spot price is dynamic; using published floor "
+                    f"{address}: spot price is dynamic; using published floor "
                     f"{floor}/{cfg.currency} per GPU-hour"
                 )
             else:
-                warnings.append(f"{snap.address}: no preemptible rates; falling back to on-demand")
-                preemptible = False
+                warnings.append(f"{address}: no preemptible rates; falling back to on-demand")
+                use_preemptible = False
         else:
-            # on_demand policy: estimate at on-demand even if flagged preemptible
-            warnings.append(
-                f"{snap.address}: preemptible/spot flagged; estimating at on-demand rates"
-            )
-            preemptible = False
+            warnings.append(f"{address}: preemptible/spot flagged; estimating at on-demand rates")
+            use_preemptible = False
 
-    if not preemptible or hourly == 0.0:
+    if not use_preemptible or hourly == 0.0:
         if billing == "gpu_only":
             rate = float(platform_prices.get(f"gpu_hour_{ck}", 0) or 0)
             hourly = rate * max(gpus, 1 if "gpu" in platform else 0)
             if gpus == 0 and "gpu" in platform:
-                warnings.append(f"{snap.address}: GPU platform but preset has 0 GPUs")
+                warnings.append(f"{address}: GPU platform but preset has 0 GPUs")
         else:
+            if billing == "components" and (vcpus == 0 and ram_gib == 0) and gpus > 0:
+                # GPU selector without preset: cannot bill CPU/RAM components.
+                return _ComputeParts(
+                    hourly=0.0,
+                    platform=platform,
+                    preset=preset,
+                    gpus=gpus,
+                    vcpus=vcpus,
+                    ram_gib=ram_gib,
+                    unknown=True,
+                    warnings=[
+                        f"{address}: platform {platform!r} bills CPU/RAM components; "
+                        "provide a preset (or platform+preset) to estimate"
+                    ],
+                    details="missing preset for component-billed platform",
+                )
             hourly = (
                 float(platform_prices.get(f"gpu_hour_{ck}", 0) or 0) * gpus
                 + float(platform_prices.get(f"cpu_hour_{ck}", 0) or 0) * vcpus
                 + float(platform_prices.get(f"ram_gib_hour_{ck}", 0) or 0) * ram_gib
             )
 
-    compute_amount = scale_hourly(hourly, cfg.period, month_hours=catalog.month_hours)
+    return _ComputeParts(
+        hourly=hourly,
+        platform=platform,
+        preset=preset,
+        gpus=gpus,
+        vcpus=vcpus,
+        ram_gib=ram_gib,
+        warnings=warnings,
+        details=f"platform={platform} preset={preset}",
+    )
 
-    # Nested managed boot disk
+
+def _local_ssd_amount(
+    address: str,
+    values: dict[str, Any],
+    catalog: PriceCatalog,
+    cfg: EstimateConfig,
+    usage: PlannedUsage,
+    *,
+    resource_name: str = "",
+) -> tuple[float, list[str]]:
+    """Price local SSD when requested; size is not in Terraform — needs planned usage."""
+    local = values.get("local_disks") or {}
+    if not isinstance(local, dict) or not local:
+        return 0.0, []
+    passthrough = local.get("passthrough_group") or {}
+    requested = False
+    if isinstance(passthrough, dict) and passthrough.get("requested") is True:
+        requested = True
+    elif local:
+        # Presence of local_disks block is enough to flag potential local SSD charges.
+        requested = True
+    if not requested:
+        return 0.0, []
+
+    metrics = usage.for_resource(address, resource_name)
+    size = float(metrics.get("local_ssd_gib", 0.0))
+    if size <= 0:
+        return 0.0, [
+            f"{address}: local disks requested but local_ssd_gib usage not set; "
+            "local SSD cost assumed 0"
+        ]
+    rate = catalog.money(catalog.raw.get("local_ssd_gib_month"), cfg.currency)
+    if rate is None:
+        return 0.0, [f"{address}: no catalog price for local SSD"]
+    amount = scale_monthly(rate * size, cfg.period, month_hours=catalog.month_hours)
+    return amount, []
+
+
+def estimate_instance(
+    snap: ResourceSnapshot,
+    catalog: PriceCatalog,
+    cfg: EstimateConfig,
+    usage: PlannedUsage,
+) -> LineItem:
+    values = snap.values
+    resources = values.get("resources") or {}
+    if not isinstance(resources, dict):
+        resources = {}
+    platform = str(resources.get("platform") or "")
+    preset = str(resources.get("preset") or "")
+    parts = _price_compute(
+        address=snap.address,
+        platform=platform,
+        preset=preset,
+        preemptible=_is_preemptible(values),
+        catalog=catalog,
+        cfg=cfg,
+    )
+    if parts.unknown:
+        return LineItem(
+            address=snap.address,
+            resource_type=snap.type,
+            side=snap.side,
+            amount=0.0,
+            currency=cfg.currency,
+            period=cfg.period,
+            details=parts.details,
+            unknown=True,
+            warnings=parts.warnings,
+        )
+
+    warnings = list(parts.warnings)
+    compute_amount = scale_hourly(parts.hourly, cfg.period, month_hours=catalog.month_hours)
+
     disk_amount = 0.0
     boot = values.get("boot_disk") or {}
     if isinstance(boot, dict):
@@ -223,10 +355,17 @@ def estimate_instance(
                 if disk_item.unknown:
                     warnings.append(f"{snap.address}: boot disk price unknown")
 
-    total = compute_amount + disk_amount
-    details = f"platform={platform} preset={preset} compute={compute_amount:.6f}"
+    local_amount, local_warnings = _local_ssd_amount(
+        snap.address, values, catalog, cfg, usage, resource_name=snap.name
+    )
+    warnings.extend(local_warnings)
+
+    total = compute_amount + disk_amount + local_amount
+    details = f"{parts.details} compute={compute_amount:.6f}"
     if disk_amount:
         details += f" boot_disk={disk_amount:.6f}"
+    if local_amount:
+        details += f" local_ssd={local_amount:.6f}"
     return LineItem(
         address=snap.address,
         resource_type=snap.type,
@@ -355,6 +494,7 @@ def estimate_filesystem(
     prices = catalog.raw.get("filesystem_gib_month", {}).get(fs_type)
     rate = catalog.money(prices, cfg.currency) if prices else None
     if rate is None:
+        note = (prices or {}).get("note", "no public list price")
         return LineItem(
             address=snap.address,
             resource_type=snap.type,
@@ -362,9 +502,9 @@ def estimate_filesystem(
             amount=0.0,
             currency=cfg.currency,
             period=cfg.period,
-            details=f"filesystem type {fs_type} unpriced",
+            details=f"filesystem type {fs_type}: {note}",
             unknown=True,
-            warnings=[f"{snap.address}: no price for filesystem type {fs_type}"],
+            warnings=[f"{snap.address}: no price for filesystem type {fs_type} ({note})"],
         )
     amount = scale_monthly(rate * size, cfg.period, month_hours=catalog.month_hours)
     return LineItem(
@@ -627,6 +767,362 @@ def estimate_free(
     )
 
 
+def _node_group_count(
+    values: dict[str, Any],
+    usage: PlannedUsage,
+    address: str,
+    name: str,
+) -> tuple[int, list[str]]:
+    """Resolve node count: usage override > fixed_node_count > autoscaling initial/min."""
+    warnings: list[str] = []
+    metrics = usage.for_resource(address, name)
+    if "node_count" in metrics:
+        count = max(0, int(metrics["node_count"]))
+        return count, warnings
+
+    fixed = values.get("fixed_node_count")
+    if isinstance(fixed, (int, float)):
+        return max(0, int(fixed)), warnings
+
+    autoscaling = values.get("autoscaling") or {}
+    if isinstance(autoscaling, dict) and autoscaling:
+        initial = autoscaling.get("initial_node_count")
+        minimum = autoscaling.get("min_node_count")
+        maximum = autoscaling.get("max_node_count")
+        if isinstance(initial, (int, float)):
+            count = int(initial)
+            warnings.append(
+                f"{address}: autoscaling node group; using initial_node_count={count} "
+                "(override with usage metric node_count)"
+            )
+            return max(0, count), warnings
+        if isinstance(minimum, (int, float)):
+            count = int(minimum)
+            warnings.append(
+                f"{address}: autoscaling node group; using min_node_count={count} "
+                f"(max={maximum!r}); override with usage metric node_count"
+            )
+            return max(0, count), warnings
+        return 0, [f"{address}: autoscaling present but min/initial node count missing"]
+
+    return 0, [f"{address}: missing fixed_node_count / autoscaling; node count assumed 0"]
+
+
+def estimate_node_group(
+    snap: ResourceSnapshot,
+    catalog: PriceCatalog,
+    cfg: EstimateConfig,
+    usage: PlannedUsage,
+) -> LineItem:
+    """MK8s nodes bill as Compute VMs (control plane is free)."""
+    values = snap.values
+    template = values.get("template") or {}
+    if not isinstance(template, dict):
+        template = {}
+    resources = template.get("resources") or {}
+    if not isinstance(resources, dict):
+        resources = {}
+    platform = str(resources.get("platform") or "")
+    preset = str(resources.get("preset") or "")
+    count, warnings = _node_group_count(values, usage, snap.address, snap.name)
+
+    if not platform:
+        return LineItem(
+            address=snap.address,
+            resource_type=snap.type,
+            side=snap.side,
+            amount=0.0,
+            currency=cfg.currency,
+            period=cfg.period,
+            details="node group missing template.resources.platform",
+            unknown=True,
+            warnings=[f"{snap.address}: missing template.resources.platform"],
+        )
+
+    parts = _price_compute(
+        address=snap.address,
+        platform=platform,
+        preset=preset,
+        preemptible=_is_preemptible(template),
+        catalog=catalog,
+        cfg=cfg,
+    )
+    warnings.extend(parts.warnings)
+    if parts.unknown:
+        return LineItem(
+            address=snap.address,
+            resource_type=snap.type,
+            side=snap.side,
+            amount=0.0,
+            currency=cfg.currency,
+            period=cfg.period,
+            details=parts.details,
+            unknown=True,
+            warnings=warnings,
+        )
+
+    per_node_compute = scale_hourly(parts.hourly, cfg.period, month_hours=catalog.month_hours)
+    boot = template.get("boot_disk") or {}
+    per_node_disk = 0.0
+    if isinstance(boot, dict) and boot:
+        disk_item = _estimate_disk_values(
+            snap.address + ".boot_disk",
+            snap.type,
+            snap.side,
+            boot,
+            catalog,
+            cfg,
+        )
+        per_node_disk = disk_item.amount
+        warnings.extend(disk_item.warnings)
+        if disk_item.unknown:
+            warnings.append(f"{snap.address}: boot disk price unknown")
+
+    local_amount, local_warnings = _local_ssd_amount(
+        snap.address, template, catalog, cfg, usage, resource_name=snap.name
+    )
+    warnings.extend(local_warnings)
+
+    amount = (per_node_compute + per_node_disk + local_amount) * count
+    details = (
+        f"nodes={count} {parts.details} per_node_compute={per_node_compute:.6f}"
+        f" per_node_disk={per_node_disk:.6f}"
+    )
+    return LineItem(
+        address=snap.address,
+        resource_type=snap.type,
+        side=snap.side,
+        amount=amount,
+        currency=cfg.currency,
+        period=cfg.period,
+        details=details,
+        warnings=warnings,
+    )
+
+
+def _parse_gpu_selector(raw: str) -> tuple[str, int] | None:
+    """Parse 'H100:8' or 'H100' → (MODEL, count)."""
+    text = raw.strip()
+    if not text:
+        return None
+    if ":" in text:
+        model, count_s = text.split(":", 1)
+        try:
+            count = int(count_s.strip())
+        except ValueError:
+            return None
+    else:
+        model, count = text, 1
+    model_key = re.sub(r"[^A-Za-z0-9]", "", model).upper()
+    return model_key, max(1, count)
+
+
+def _parse_cpu_selector(raw: str) -> tuple[str, int] | None:
+    """Parse 'amd:16' → (family, vcpus)."""
+    text = raw.strip()
+    if not text or ":" not in text:
+        return None
+    family, count_s = text.split(":", 1)
+    try:
+        count = int(count_s.strip())
+    except ValueError:
+        return None
+    return family.strip().lower(), max(1, count)
+
+
+def _resolve_serverless_platform(
+    values: dict[str, Any],
+    address: str,
+) -> tuple[str, str, int | None, int | None, int | None, list[str]]:
+    """Return platform, preset, optional gpu/vcpu/ram overrides, warnings."""
+    warnings: list[str] = []
+    platform = str(values.get("platform") or "")
+    preset = str(values.get("preset") or "")
+    gpus: int | None = None
+    vcpus: int | None = None
+    ram_gib: int | None = None
+
+    gpu_list = values.get("gpu") or []
+    cpu_list = values.get("cpu") or []
+    if isinstance(gpu_list, list) and gpu_list and not platform:
+        parsed = _parse_gpu_selector(str(gpu_list[0]))
+        if parsed:
+            model, gpus = parsed
+            mapped = GPU_SELECTOR_TO_PLATFORM.get(model)
+            if mapped:
+                platform = mapped
+                warnings.append(
+                    f"{address}: mapped gpu selector {gpu_list[0]!r} → platform {platform}"
+                )
+            else:
+                warnings.append(f"{address}: unrecognized gpu selector model {model!r}")
+    if isinstance(cpu_list, list) and cpu_list and not platform:
+        parsed = _parse_cpu_selector(str(cpu_list[0]))
+        if parsed:
+            family, vcpus = parsed
+            mapped = CPU_FAMILY_TO_PLATFORM.get(family)
+            if mapped:
+                platform = mapped
+                warnings.append(
+                    f"{address}: mapped cpu selector {cpu_list[0]!r} → platform {platform}; "
+                    "RAM unknown without preset — set platform+preset for accurate estimate"
+                )
+                # Without RAM, mark incomplete unless preset later fills it.
+                ram_gib = 0
+            else:
+                warnings.append(f"{address}: unrecognized cpu family {family!r}")
+
+    return platform, preset, gpus, vcpus, ram_gib, warnings
+
+
+def estimate_ai_endpoint(
+    snap: ResourceSnapshot,
+    catalog: PriceCatalog,
+    cfg: EstimateConfig,
+    usage: PlannedUsage,
+) -> LineItem:
+    """Serverless AI endpoints bill as Compute while running (docs)."""
+    values = snap.values
+    warnings: list[str] = []
+    metrics = usage.for_resource(snap.address, snap.name)
+    running_fraction = float(metrics.get("running_fraction", 1.0))
+    if running_fraction < 0:
+        running_fraction = 0.0
+    if running_fraction > 1:
+        running_fraction = 1.0
+    if "running_fraction" not in metrics:
+        warnings.append(
+            f"{snap.address}: assuming endpoint runs 100% of period "
+            "(set usage metric running_fraction 0..1; stopped endpoints bill disk only=0)"
+        )
+
+    platform, preset, gpus, vcpus, ram_gib, map_warnings = _resolve_serverless_platform(
+        values, snap.address
+    )
+    warnings.extend(map_warnings)
+
+    if not platform:
+        return LineItem(
+            address=snap.address,
+            resource_type=snap.type,
+            side=snap.side,
+            amount=0.0,
+            currency=cfg.currency,
+            period=cfg.period,
+            details="serverless endpoint missing platform/preset/gpu/cpu",
+            unknown=True,
+            warnings=[f"{snap.address}: cannot resolve Compute platform for endpoint"],
+        )
+
+    # CPU selector without RAM/preset cannot be priced.
+    if vcpus is not None and ram_gib == 0 and not preset:
+        return LineItem(
+            address=snap.address,
+            resource_type=snap.type,
+            side=snap.side,
+            amount=0.0,
+            currency=cfg.currency,
+            period=cfg.period,
+            details="cpu selector without preset (RAM unknown)",
+            unknown=True,
+            warnings=warnings
+            + [f"{snap.address}: provide preset or platform+preset for CPU endpoints"],
+        )
+
+    preemptible = _is_preemptible(values)
+    pricing_model = values.get("pricing_model")
+    if isinstance(pricing_model, dict) and (
+        pricing_model.get("follows_spot_price") or pricing_model.get("spot_pricing_policy")
+    ):
+        preemptible = True
+
+    if preset:
+        parts = _price_compute(
+            address=snap.address,
+            platform=platform,
+            preset=preset,
+            preemptible=preemptible,
+            catalog=catalog,
+            cfg=cfg,
+        )
+    elif gpus is not None:
+        parts = _price_compute(
+            address=snap.address,
+            platform=platform,
+            preset=preset,
+            preemptible=preemptible,
+            catalog=catalog,
+            cfg=cfg,
+            gpus=gpus,
+            vcpus=0,
+            ram_gib=0,
+        )
+    else:
+        parts = _price_compute(
+            address=snap.address,
+            platform=platform,
+            preset=preset,
+            preemptible=preemptible,
+            catalog=catalog,
+            cfg=cfg,
+            gpus=gpus,
+            vcpus=vcpus,
+            ram_gib=ram_gib,
+        )
+
+    warnings.extend(parts.warnings)
+    if parts.unknown:
+        return LineItem(
+            address=snap.address,
+            resource_type=snap.type,
+            side=snap.side,
+            amount=0.0,
+            currency=cfg.currency,
+            period=cfg.period,
+            details=parts.details,
+            unknown=True,
+            warnings=warnings,
+        )
+
+    compute_amount = (
+        scale_hourly(parts.hourly, cfg.period, month_hours=catalog.month_hours) * running_fraction
+    )
+
+    disk = values.get("disk") or {}
+    disk_amount = 0.0
+    if isinstance(disk, dict) and disk:
+        # Endpoint disk schema often uses size_bytes only.
+        disk_item = _estimate_disk_values(
+            snap.address + ".disk",
+            snap.type,
+            snap.side,
+            disk,
+            catalog,
+            cfg,
+        )
+        # While running, disk is billed; docs: stopped endpoint → no storage charge.
+        disk_amount = disk_item.amount * running_fraction
+        warnings.extend(disk_item.warnings)
+        if disk_item.unknown:
+            warnings.append(f"{snap.address}: endpoint disk price unknown")
+
+    amount = compute_amount + disk_amount
+    details = (
+        f"{parts.details} running_fraction={running_fraction} "
+        f"compute={compute_amount:.6f} disk={disk_amount:.6f}"
+    )
+    return LineItem(
+        address=snap.address,
+        resource_type=snap.type,
+        side=snap.side,
+        amount=amount,
+        currency=cfg.currency,
+        period=cfg.period,
+        details=details,
+        warnings=warnings,
+    )
+
+
 def estimate_unknown(
     snap: ResourceSnapshot,
     catalog: PriceCatalog,
@@ -656,6 +1152,9 @@ ESTIMATORS: dict[str, Estimator] = {
     "nebius_vpc_v1_allocation": estimate_allocation,
     "nebius_msp_postgresql_v1alpha1_cluster": estimate_postgresql,
     "nebius_msp_mlflow_v1alpha1_cluster": estimate_mlflow,
+    "nebius_mk8s_v1_node_group": estimate_node_group,
+    "nebius_mk8s_v1alpha1_node_group": estimate_node_group,
+    "nebius_ai_v1_endpoint": estimate_ai_endpoint,
 }
 
 

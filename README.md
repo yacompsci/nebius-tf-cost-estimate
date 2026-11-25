@@ -72,6 +72,12 @@ python -m pytest && ruff check src tests scripts && ruff format --check src test
 nebius-tf-cost estimate --help
 ```
 
+## Planned usage
+
+Object Storage, MK8s node counts, Serverless AI duty cycle, and local SSD size are not fully encoded in Terraform. Pass planned metrics with `--usage-file` / `--usage-metric`.
+
+See **[docs/usage-file.md](docs/usage-file.md)** for the file shape, metric table, lookup order, and [examples/usage.yaml](examples/usage.yaml).
+
 ## Exit codes
 
 | Code | Meaning |

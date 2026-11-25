@@ -31,12 +31,14 @@ class BudgetVerdict:
 
 
 def select_amount(result: EstimateResult, compare_mode: CompareMode) -> float:
+    """Select the **max** (pessimistic) figure for budget gating."""
     if compare_mode == "after":
-        return result.after_total
+        return result.after_total_max
     if compare_mode == "delta":
-        return result.delta
+        return result.delta_max
     if compare_mode == "abs_delta":
-        return abs(result.delta)
+        # Worst-case absolute change across the delta interval.
+        return max(abs(result.delta_min), abs(result.delta_max))
     raise ValueError(f"unknown compare mode: {compare_mode}")
 
 
@@ -47,19 +49,23 @@ def evaluate_budget(
     *,
     compare_mode: CompareMode = "after",
 ) -> BudgetVerdict | None:
-    """Return a verdict when a budget is set; otherwise None."""
+    """Return a verdict when a budget is set; otherwise None.
+
+    Gate always uses the pessimistic (max) estimate so CI fails when the
+    upper bound exceeds the budget.
+    """
     if budget is None:
         return None
     amount = select_amount(result, compare_mode)
     exceeded = amount > budget
     if exceeded:
         message = (
-            f"budget exceeded: {amount:.4f} {result.currency}/{result.period} "
+            f"budget exceeded (max): {amount:.4f} {result.currency}/{result.period} "
             f"> {budget:.4f} (compare={compare_mode}, on-exceed={on_exceed})"
         )
     else:
         message = (
-            f"within budget: {amount:.4f} {result.currency}/{result.period} "
+            f"within budget (max): {amount:.4f} {result.currency}/{result.period} "
             f"<= {budget:.4f} (compare={compare_mode})"
         )
     return BudgetVerdict(

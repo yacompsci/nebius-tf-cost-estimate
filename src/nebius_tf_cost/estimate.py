@@ -47,26 +47,57 @@ class LineItem:
     details: str
     unknown: bool = False
     warnings: list[str] = field(default_factory=list)
+    # Optimistic / pessimistic bounds. When omitted, both default to ``amount``.
+    # ``amount`` is normalized to ``amount_max`` (budget / point estimate).
+    amount_min: float | None = None
+    amount_max: float | None = None
+
+    def __post_init__(self) -> None:
+        amin = self.amount if self.amount_min is None else self.amount_min
+        amax = self.amount if self.amount_max is None else self.amount_max
+        self.amount_min = float(amin)
+        self.amount_max = float(amax)
+        self.amount = self.amount_max
 
 
 @dataclass
 class EstimateResult:
     period: Period
     currency: str
-    before_total: float
-    after_total: float
-    delta: float
+    before_total_min: float
+    before_total_max: float
+    after_total_min: float
+    after_total_max: float
+    delta_min: float
+    delta_max: float
     before_items: list[LineItem]
     after_items: list[LineItem]
     unknown_resources: list[str]
     warnings: list[str]
     catalog_path: str
     document_kind: str
+    # Backward-compatible aliases: totals/delta are the **max** (pessimistic) figures.
+    before_total: float = 0.0
+    after_total: float = 0.0
+    delta: float = 0.0
+
+    def __post_init__(self) -> None:
+        self.before_total = self.before_total_max
+        self.after_total = self.after_total_max
+        self.delta = self.delta_max
 
     @property
     def total(self) -> float:
-        """Preferred total for budget gating: after (plan/state) cost."""
-        return self.after_total
+        """Preferred total for budget gating: after max (pessimistic) cost."""
+        return self.after_total_max
+
+    @property
+    def total_min(self) -> float:
+        return self.after_total_min
+
+    @property
+    def total_max(self) -> float:
+        return self.after_total_max
 
 
 Estimator = Callable[
@@ -119,7 +150,8 @@ def _cur_key(currency: str) -> str:
 
 @dataclass
 class _ComputeParts:
-    hourly: float
+    hourly_min: float
+    hourly_max: float
     platform: str
     preset: str
     gpus: int
@@ -128,6 +160,73 @@ class _ComputeParts:
     unknown: bool = False
     warnings: list[str] = field(default_factory=list)
     details: str = ""
+
+    @property
+    def hourly(self) -> float:
+        """Pessimistic hourly rate (on-demand / ceiling)."""
+        return self.hourly_max
+
+
+def _on_demand_hourly(
+    platform_prices: dict[str, Any],
+    *,
+    billing: str | None,
+    gpus: int,
+    vcpus: int,
+    ram_gib: int,
+    platform: str,
+    ck: str,
+) -> tuple[float, list[str], bool]:
+    """Return (hourly, warnings, unknown)."""
+    warnings: list[str] = []
+    if billing == "gpu_only":
+        rate = float(platform_prices.get(f"gpu_hour_{ck}", 0) or 0)
+        hourly = rate * max(gpus, 1 if "gpu" in platform else 0)
+        if gpus == 0 and "gpu" in platform:
+            warnings.append("GPU platform but preset has 0 GPUs")
+        return hourly, warnings, False
+    if billing == "components" and (vcpus == 0 and ram_gib == 0) and gpus > 0:
+        return (
+            0.0,
+            [
+                f"platform {platform!r} bills CPU/RAM components; "
+                "provide a preset (or platform+preset) to estimate"
+            ],
+            True,
+        )
+    hourly = (
+        float(platform_prices.get(f"gpu_hour_{ck}", 0) or 0) * gpus
+        + float(platform_prices.get(f"cpu_hour_{ck}", 0) or 0) * vcpus
+        + float(platform_prices.get(f"ram_gib_hour_{ck}", 0) or 0) * ram_gib
+    )
+    return hourly, warnings, False
+
+
+def _preemptible_floor_hourly(
+    platform_prices: dict[str, Any],
+    *,
+    billing: str | None,
+    gpus: int,
+    vcpus: int,
+    ram_gib: int,
+    ck: str,
+) -> tuple[float | None, str | None]:
+    """Return (hourly_or_None, note) for published spot/preemptible floor rates."""
+    fixed = platform_prices.get("preemptible")
+    if isinstance(fixed, dict):
+        if billing == "gpu_only":
+            hourly = float(fixed.get(f"gpu_hour_{ck}", 0)) * max(gpus, 1 if gpus else 0)
+        else:
+            hourly = (
+                float(fixed.get(f"gpu_hour_{ck}", 0) or 0) * gpus
+                + float(fixed.get(f"cpu_hour_{ck}", 0) or 0) * vcpus
+                + float(fixed.get(f"ram_gib_hour_{ck}", 0) or 0) * ram_gib
+            )
+        return hourly, "published preemptible rates"
+    floor = platform_prices.get(f"preemptible_floor_{ck}")
+    if floor is not None and billing == "gpu_only":
+        return float(floor) * max(gpus, 1 if gpus else 0), f"published floor {floor}"
+    return None, None
 
 
 def _price_compute(
@@ -142,12 +241,17 @@ def _price_compute(
     vcpus: int | None = None,
     ram_gib: int | None = None,
 ) -> _ComputeParts:
-    """Shared GPU/CPU/RAM hourly pricing used by instances, node groups, and Serverless AI."""
+    """Shared GPU/CPU/RAM hourly pricing used by instances, node groups, and Serverless AI.
+
+    For preemptible/spot resources, ``hourly_min`` is the published floor (when known)
+    and ``hourly_max`` is the on-demand ceiling. Non-spot resources have min == max.
+    """
     warnings: list[str] = []
     platform_prices = catalog.platform(platform)
     if not platform_prices:
         return _ComputeParts(
-            hourly=0.0,
+            hourly_min=0.0,
+            hourly_max=0.0,
             platform=platform,
             preset=preset,
             gpus=gpus or 0,
@@ -163,7 +267,8 @@ def _price_compute(
             parsed_gpus, parsed_vcpus, parsed_ram = parse_preset(preset) if preset else (0, 0, 0)
         except ValueError as exc:
             return _ComputeParts(
-                hourly=0.0,
+                hourly_min=0.0,
+                hourly_max=0.0,
                 platform=platform,
                 preset=preset,
                 gpus=0,
@@ -178,80 +283,98 @@ def _price_compute(
         ram_gib = parsed_ram if ram_gib is None else ram_gib
 
     ck = _cur_key(cfg.currency)
-    hourly = 0.0
     billing = platform_prices.get("billing")
-    use_preemptible = preemptible
 
-    if use_preemptible:
-        if cfg.preemptible_policy == "reject":
-            return _ComputeParts(
-                hourly=0.0,
-                platform=platform,
-                preset=preset,
-                gpus=gpus,
-                vcpus=vcpus,
-                ram_gib=ram_gib,
-                unknown=True,
-                warnings=[f"{address}: preemptible/spot instance; set --preemptible-policy"],
-                details="preemptible rejected by policy",
+    on_demand, od_warnings, od_unknown = _on_demand_hourly(
+        platform_prices,
+        billing=billing,
+        gpus=gpus,
+        vcpus=vcpus,
+        ram_gib=ram_gib,
+        platform=platform,
+        ck=ck,
+    )
+    for w in od_warnings:
+        warnings.append(f"{address}: {w}")
+
+    if od_unknown:
+        return _ComputeParts(
+            hourly_min=0.0,
+            hourly_max=0.0,
+            platform=platform,
+            preset=preset,
+            gpus=gpus,
+            vcpus=vcpus,
+            ram_gib=ram_gib,
+            unknown=True,
+            warnings=warnings,
+            details="missing preset for component-billed platform",
+        )
+
+    if not preemptible:
+        return _ComputeParts(
+            hourly_min=on_demand,
+            hourly_max=on_demand,
+            platform=platform,
+            preset=preset,
+            gpus=gpus,
+            vcpus=vcpus,
+            ram_gib=ram_gib,
+            warnings=warnings,
+            details=f"platform={platform} preset={preset}",
+        )
+
+    if cfg.preemptible_policy == "reject":
+        return _ComputeParts(
+            hourly_min=0.0,
+            hourly_max=0.0,
+            platform=platform,
+            preset=preset,
+            gpus=gpus,
+            vcpus=vcpus,
+            ram_gib=ram_gib,
+            unknown=True,
+            warnings=[f"{address}: preemptible/spot instance; set --preemptible-policy"],
+            details="preemptible rejected by policy",
+        )
+
+    floor_hourly, floor_note = _preemptible_floor_hourly(
+        platform_prices,
+        billing=billing,
+        gpus=gpus,
+        vcpus=vcpus,
+        ram_gib=ram_gib,
+        ck=ck,
+    )
+    if floor_hourly is not None:
+        # Optimistic = floor / published preemptible; pessimistic = on-demand ceiling.
+        hourly_min = min(floor_hourly, on_demand)
+        hourly_max = on_demand
+        if floor_note and "floor" in floor_note:
+            warnings.append(
+                f"{address}: spot price is dynamic; min uses {floor_note} "
+                f"{cfg.currency}/GPU-hour, max uses on-demand"
             )
-        if cfg.preemptible_policy == "floor":
-            floor = platform_prices.get(f"preemptible_floor_{ck}")
-            fixed = platform_prices.get("preemptible")
-            if isinstance(fixed, dict):
-                if billing == "gpu_only":
-                    hourly = float(fixed.get(f"gpu_hour_{ck}", 0)) * max(gpus, 1 if gpus else 0)
-                else:
-                    hourly = (
-                        float(fixed.get(f"gpu_hour_{ck}", 0) or 0) * gpus
-                        + float(fixed.get(f"cpu_hour_{ck}", 0) or 0) * vcpus
-                        + float(fixed.get(f"ram_gib_hour_{ck}", 0) or 0) * ram_gib
-                    )
-                warnings.append(f"{address}: using published preemptible rates")
-            elif floor is not None and billing == "gpu_only":
-                hourly = float(floor) * max(gpus, 1 if gpus else 0)
-                warnings.append(
-                    f"{address}: spot price is dynamic; using published floor "
-                    f"{floor}/{cfg.currency} per GPU-hour"
-                )
-            else:
-                warnings.append(f"{address}: no preemptible rates; falling back to on-demand")
-                use_preemptible = False
         else:
-            warnings.append(f"{address}: preemptible/spot flagged; estimating at on-demand rates")
-            use_preemptible = False
-
-    if not use_preemptible or hourly == 0.0:
-        if billing == "gpu_only":
-            rate = float(platform_prices.get(f"gpu_hour_{ck}", 0) or 0)
-            hourly = rate * max(gpus, 1 if "gpu" in platform else 0)
-            if gpus == 0 and "gpu" in platform:
-                warnings.append(f"{address}: GPU platform but preset has 0 GPUs")
-        else:
-            if billing == "components" and (vcpus == 0 and ram_gib == 0) and gpus > 0:
-                # GPU selector without preset: cannot bill CPU/RAM components.
-                return _ComputeParts(
-                    hourly=0.0,
-                    platform=platform,
-                    preset=preset,
-                    gpus=gpus,
-                    vcpus=vcpus,
-                    ram_gib=ram_gib,
-                    unknown=True,
-                    warnings=[
-                        f"{address}: platform {platform!r} bills CPU/RAM components; "
-                        "provide a preset (or platform+preset) to estimate"
-                    ],
-                    details="missing preset for component-billed platform",
-                )
-            hourly = (
-                float(platform_prices.get(f"gpu_hour_{ck}", 0) or 0) * gpus
-                + float(platform_prices.get(f"cpu_hour_{ck}", 0) or 0) * vcpus
-                + float(platform_prices.get(f"ram_gib_hour_{ck}", 0) or 0) * ram_gib
+            warnings.append(
+                f"{address}: preemptible/spot; min uses {floor_note}, max uses on-demand"
             )
+        return _ComputeParts(
+            hourly_min=hourly_min,
+            hourly_max=hourly_max,
+            platform=platform,
+            preset=preset,
+            gpus=gpus,
+            vcpus=vcpus,
+            ram_gib=ram_gib,
+            warnings=warnings,
+            details=f"platform={platform} preset={preset}",
+        )
 
+    warnings.append(f"{address}: preemptible/spot flagged; no floor rates — min=max=on-demand")
     return _ComputeParts(
-        hourly=hourly,
+        hourly_min=on_demand,
+        hourly_max=on_demand,
         platform=platform,
         preset=preset,
         gpus=gpus,
@@ -333,7 +456,8 @@ def estimate_instance(
         )
 
     warnings = list(parts.warnings)
-    compute_amount = scale_hourly(parts.hourly, cfg.period, month_hours=catalog.month_hours)
+    compute_min = scale_hourly(parts.hourly_min, cfg.period, month_hours=catalog.month_hours)
+    compute_max = scale_hourly(parts.hourly_max, cfg.period, month_hours=catalog.month_hours)
 
     disk_amount = 0.0
     boot = values.get("boot_disk") or {}
@@ -350,7 +474,7 @@ def estimate_instance(
                     catalog,
                     cfg,
                 )
-                disk_amount = disk_item.amount
+                disk_amount = disk_item.amount_max
                 warnings.extend(disk_item.warnings)
                 if disk_item.unknown:
                     warnings.append(f"{snap.address}: boot disk price unknown")
@@ -360,8 +484,9 @@ def estimate_instance(
     )
     warnings.extend(local_warnings)
 
-    total = compute_amount + disk_amount + local_amount
-    details = f"{parts.details} compute={compute_amount:.6f}"
+    total_min = compute_min + disk_amount + local_amount
+    total_max = compute_max + disk_amount + local_amount
+    details = f"{parts.details} compute_min={compute_min:.6f} compute_max={compute_max:.6f}"
     if disk_amount:
         details += f" boot_disk={disk_amount:.6f}"
     if local_amount:
@@ -370,11 +495,13 @@ def estimate_instance(
         address=snap.address,
         resource_type=snap.type,
         side=snap.side,
-        amount=total,
+        amount=total_max,
         currency=cfg.currency,
         period=cfg.period,
         details=details,
         warnings=warnings,
+        amount_min=total_min,
+        amount_max=total_max,
     )
 
 
@@ -767,45 +894,78 @@ def estimate_free(
     )
 
 
-def _node_group_count(
+def _node_group_count_range(
     values: dict[str, Any],
     usage: PlannedUsage,
     address: str,
     name: str,
-) -> tuple[int, list[str]]:
-    """Resolve node count: usage override > fixed_node_count > autoscaling initial/min."""
+) -> tuple[int, int, list[str]]:
+    """Resolve node count range: (min, max).
+
+    - usage ``node_count`` or ``fixed_node_count`` → min == max
+    - autoscaling → min uses min_node_count (else initial); max uses max_node_count
+      (else initial / min)
+    """
     warnings: list[str] = []
     metrics = usage.for_resource(address, name)
     if "node_count" in metrics:
         count = max(0, int(metrics["node_count"]))
-        return count, warnings
+        return count, count, warnings
 
     fixed = values.get("fixed_node_count")
     if isinstance(fixed, (int, float)):
-        return max(0, int(fixed)), warnings
+        count = max(0, int(fixed))
+        return count, count, warnings
 
     autoscaling = values.get("autoscaling") or {}
     if isinstance(autoscaling, dict) and autoscaling:
         initial = autoscaling.get("initial_node_count")
         minimum = autoscaling.get("min_node_count")
         maximum = autoscaling.get("max_node_count")
-        if isinstance(initial, (int, float)):
-            count = int(initial)
-            warnings.append(
-                f"{address}: autoscaling node group; using initial_node_count={count} "
-                "(override with usage metric node_count)"
-            )
-            return max(0, count), warnings
-        if isinstance(minimum, (int, float)):
-            count = int(minimum)
-            warnings.append(
-                f"{address}: autoscaling node group; using min_node_count={count} "
-                f"(max={maximum!r}); override with usage metric node_count"
-            )
-            return max(0, count), warnings
-        return 0, [f"{address}: autoscaling present but min/initial node count missing"]
 
-    return 0, [f"{address}: missing fixed_node_count / autoscaling; node count assumed 0"]
+        count_min: int | None = None
+        if isinstance(minimum, (int, float)):
+            count_min = max(0, int(minimum))
+        elif isinstance(initial, (int, float)):
+            count_min = max(0, int(initial))
+
+        count_max: int | None = None
+        if isinstance(maximum, (int, float)):
+            count_max = max(0, int(maximum))
+        elif isinstance(initial, (int, float)):
+            count_max = max(0, int(initial))
+        elif count_min is not None:
+            count_max = count_min
+
+        if count_min is None and count_max is None:
+            return 0, 0, [f"{address}: autoscaling present but min/initial node count missing"]
+
+        if count_min is None:
+            count_min = count_max or 0
+        if count_max is None:
+            count_max = count_min
+        if count_max < count_min:
+            count_max = count_min
+
+        warnings.append(
+            f"{address}: autoscaling node group; min_nodes={count_min} max_nodes={count_max} "
+            "(override with usage metric node_count)"
+        )
+        return count_min, count_max, warnings
+
+    return 0, 0, [f"{address}: missing fixed_node_count / autoscaling; node count assumed 0"]
+
+
+def _node_group_count(
+    values: dict[str, Any],
+    usage: PlannedUsage,
+    address: str,
+    name: str,
+) -> tuple[int, list[str]]:
+    """Backward-compatible single count: pessimistic (max) node count."""
+    count_min, count_max, warnings = _node_group_count_range(values, usage, address, name)
+    del count_min
+    return count_max, warnings
 
 
 def estimate_node_group(
@@ -824,7 +984,7 @@ def estimate_node_group(
         resources = {}
     platform = str(resources.get("platform") or "")
     preset = str(resources.get("preset") or "")
-    count, warnings = _node_group_count(values, usage, snap.address, snap.name)
+    count_min, count_max, warnings = _node_group_count_range(values, usage, snap.address, snap.name)
 
     if not platform:
         return LineItem(
@@ -861,7 +1021,12 @@ def estimate_node_group(
             warnings=warnings,
         )
 
-    per_node_compute = scale_hourly(parts.hourly, cfg.period, month_hours=catalog.month_hours)
+    per_node_compute_min = scale_hourly(
+        parts.hourly_min, cfg.period, month_hours=catalog.month_hours
+    )
+    per_node_compute_max = scale_hourly(
+        parts.hourly_max, cfg.period, month_hours=catalog.month_hours
+    )
     boot = template.get("boot_disk") or {}
     per_node_disk = 0.0
     if isinstance(boot, dict) and boot:
@@ -873,7 +1038,7 @@ def estimate_node_group(
             catalog,
             cfg,
         )
-        per_node_disk = disk_item.amount
+        per_node_disk = disk_item.amount_max
         warnings.extend(disk_item.warnings)
         if disk_item.unknown:
             warnings.append(f"{snap.address}: boot disk price unknown")
@@ -883,20 +1048,27 @@ def estimate_node_group(
     )
     warnings.extend(local_warnings)
 
-    amount = (per_node_compute + per_node_disk + local_amount) * count
+    per_node_min = per_node_compute_min + per_node_disk + local_amount
+    per_node_max = per_node_compute_max + per_node_disk + local_amount
+    amount_min = per_node_min * count_min
+    amount_max = per_node_max * count_max
     details = (
-        f"nodes={count} {parts.details} per_node_compute={per_node_compute:.6f}"
-        f" per_node_disk={per_node_disk:.6f}"
+        f"nodes_min={count_min} nodes_max={count_max} {parts.details} "
+        f"per_node_compute_min={per_node_compute_min:.6f} "
+        f"per_node_compute_max={per_node_compute_max:.6f} "
+        f"per_node_disk={per_node_disk:.6f}"
     )
     return LineItem(
         address=snap.address,
         resource_type=snap.type,
         side=snap.side,
-        amount=amount,
+        amount=amount_max,
         currency=cfg.currency,
         period=cfg.period,
         details=details,
         warnings=warnings,
+        amount_min=amount_min,
+        amount_max=amount_max,
     )
 
 
@@ -1084,8 +1256,13 @@ def estimate_ai_endpoint(
             warnings=warnings,
         )
 
-    compute_amount = (
-        scale_hourly(parts.hourly, cfg.period, month_hours=catalog.month_hours) * running_fraction
+    compute_min = (
+        scale_hourly(parts.hourly_min, cfg.period, month_hours=catalog.month_hours)
+        * running_fraction
+    )
+    compute_max = (
+        scale_hourly(parts.hourly_max, cfg.period, month_hours=catalog.month_hours)
+        * running_fraction
     )
 
     disk = values.get("disk") or {}
@@ -1101,25 +1278,28 @@ def estimate_ai_endpoint(
             cfg,
         )
         # While running, disk is billed; docs: stopped endpoint → no storage charge.
-        disk_amount = disk_item.amount * running_fraction
+        disk_amount = disk_item.amount_max * running_fraction
         warnings.extend(disk_item.warnings)
         if disk_item.unknown:
             warnings.append(f"{snap.address}: endpoint disk price unknown")
 
-    amount = compute_amount + disk_amount
+    amount_min = compute_min + disk_amount
+    amount_max = compute_max + disk_amount
     details = (
         f"{parts.details} running_fraction={running_fraction} "
-        f"compute={compute_amount:.6f} disk={disk_amount:.6f}"
+        f"compute_min={compute_min:.6f} compute_max={compute_max:.6f} disk={disk_amount:.6f}"
     )
     return LineItem(
         address=snap.address,
         resource_type=snap.type,
         side=snap.side,
-        amount=amount,
+        amount=amount_max,
         currency=cfg.currency,
         period=cfg.period,
         details=details,
         warnings=warnings,
+        amount_min=amount_min,
+        amount_max=amount_max,
     )
 
 
@@ -1170,8 +1350,17 @@ def estimate_resource(
     return estimator(snap, catalog, cfg, usage)
 
 
+def _sum_items_min(items: list[LineItem]) -> float:
+    return sum(i.amount_min if i.amount_min is not None else i.amount for i in items)
+
+
+def _sum_items_max(items: list[LineItem]) -> float:
+    return sum(i.amount_max if i.amount_max is not None else i.amount for i in items)
+
+
 def _sum_items(items: list[LineItem]) -> float:
-    return sum(i.amount for i in items)
+    """Sum pessimistic (max) amounts."""
+    return _sum_items_max(items)
 
 
 def run_estimate(
@@ -1192,9 +1381,13 @@ def run_estimate(
     elif cfg.mode == "plan":
         pass  # keep both
 
-    before_total = _sum_items(before_items)
-    after_total = _sum_items(after_items)
-    delta = after_total - before_total
+    before_total_min = _sum_items_min(before_items)
+    before_total_max = _sum_items_max(before_items)
+    after_total_min = _sum_items_min(after_items)
+    after_total_max = _sum_items_max(after_items)
+    # Interval arithmetic for plan delta: optimistic change vs pessimistic change.
+    delta_min = after_total_min - before_total_max
+    delta_max = after_total_max - before_total_min
 
     warnings: list[str] = []
     unknown: list[str] = []
@@ -1220,9 +1413,12 @@ def run_estimate(
     return EstimateResult(
         period=cfg.period,
         currency=cfg.currency,
-        before_total=before_total,
-        after_total=after_total,
-        delta=delta,
+        before_total_min=before_total_min,
+        before_total_max=before_total_max,
+        after_total_min=after_total_min,
+        after_total_max=after_total_max,
+        delta_min=delta_min,
+        delta_max=delta_max,
         before_items=before_items,
         after_items=after_items,
         unknown_resources=uniq_u,

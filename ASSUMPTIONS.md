@@ -1,11 +1,29 @@
 # Assumptions and known gaps
 
+## Min / max cost semantics
+
+Estimates report an **optimistic min** and **pessimistic max** for totals and plan deltas.
+Budget `--on-exceed warn|fail` always gates on the **max** figure.
+
+| Bound | Meaning |
+|-------|---------|
+| **min** | Optimistic: known rates only; spot/preemptible uses published floor or fixed preemptible rates when available; autoscaling node groups use `min_node_count` (else `initial_node_count`). |
+| **max** | Pessimistic: spot/preemptible uses on-demand as the ceiling; autoscaling uses `max_node_count` (else initial/min); budget compare uses this bound. |
+
+- When min and max coincide (fixed sizes, non-spot, known rates), both equal the previous single-point estimate.
+- **Delta range** uses interval arithmetic: `delta_min = after_min − before_max`, `delta_max = after_max − before_min`.
+- Missing planned usage (Object Storage, local SSD size) stays **0 for both** bounds — there is no configured upper bound unless you pass `--usage-file` / `--usage-metric`. Documented zero-with-warning policy is unchanged.
+- Unknown / unpriced resources contribute **0** to both bounds (and appear under unknown resources).
+- `--preemptible-policy reject` still marks spot resources unknown (0). `on_demand` / `floor` both report the min/max range when a floor exists; max remains on-demand for budget safety.
+
+JSON includes `*_min` / `*_max` fields; `before_total` / `after_total` / `delta` remain aliases of the **max** values for compatibility.
+
 ## Pricing
 
 - Rates come from public Nebius documentation pages (USD/ILS list prices, excluding tax/VAT).
 - **Month** means **730 hours**, matching Nebius storage pricing units.
 - **Year** means **8760 hours** (linear scale from hourly rates).
-- Spot/preemptible GPU prices for many platforms are **dynamic**. Default `--preemptible-policy on_demand` prices them at on-demand rates and emits a warning. `floor` uses published “from $X” floors where available; `reject` marks the resource unknown.
+- Spot/preemptible GPU prices for many platforms are **dynamic**. Estimates use published floors for **min** and on-demand for **max** when a floor exists. `--preemptible-policy reject` marks the resource unknown; otherwise a warning is emitted.
 - Catalog timestamp is in `meta.fetched_at`. Treat estimates as approximate until refreshed.
 - Catalog also records `meta.sources`, `unpriced_gaps`, and documented `usage_metrics`.
 
@@ -32,7 +50,7 @@
 | `local_ssd_gib` | Instances / node templates with `local_disks` | Size is not in Terraform |
 
 - Without `--usage-file` / `--usage-metric`, Object Storage storage/request/egress cost is **0** with a warning.
-- Autoscaling node groups without `node_count` use `initial_node_count`, else `min_node_count`, with a warning.
+- Autoscaling node groups without `node_count` use **min** = `min_node_count` (else `initial_node_count`) and **max** = `max_node_count` (else initial/min), with a warning.
 
 ## Free / control-plane resources
 

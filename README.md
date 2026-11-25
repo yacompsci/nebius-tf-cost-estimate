@@ -2,7 +2,7 @@
 
 Estimate **Nebius AI Cloud** costs from Terraform **plan** or **state** JSON — no Nebius account credentials required.
 
-Uses a vendored public price catalog (`data/prices.json`) derived from [Nebius docs](https://docs.nebius.com/llms.txt). Supports total estimates, plan deltas, budget warn/fail gates, hour/month/year periods, and planned usage for usage-based resources (Object Storage, MK8s node counts, Serverless AI duty cycle, local SSD size).
+Uses a vendored public price catalog (`data/prices.json`) derived from [Nebius docs](https://docs.nebius.com/llms.txt). Supports **min/max** total estimates and plan deltas, budget warn/fail gates on the **max** (pessimistic) figure, hour/month/year periods, and planned usage for usage-based resources (Object Storage, MK8s node counts, Serverless AI duty cycle, local SSD size).
 
 ## Install
 
@@ -27,7 +27,7 @@ nebius-tf-cost estimate \
   --on-exceed warn
 ```
 
-Expected: prints before/after/delta line items, warnings for unpriced or zero-usage resources, and a budget verdict.
+Expected: prints before/after/delta **min and max** totals, line items, warnings for unpriced or zero-usage resources, and a budget verdict gated on **max**.
 
 ## CI-friendly test command
 
@@ -52,8 +52,8 @@ python -m pytest && ruff check src tests scripts && ruff format --check src test
 | `--period hour\|month\|year` | Totals period (`month` = 730h per Nebius docs) |
 | `--currency USD\|ILS` | Catalog currency |
 | `--budget AMOUNT` | Budget in `--currency` for the selected period |
-| `--on-exceed warn\|fail` | `warn` → exit 0 + message; `fail` → exit 2 |
-| `--budget-compare after\|delta\|abs_delta` | Which figure to gate |
+| `--on-exceed warn\|fail` | Gate on **max** estimate: `warn` → exit 0; `fail` → exit 2 |
+| `--budget-compare after\|delta\|abs_delta` | Which **max** figure to gate (`after_total_max`, `delta_max`, or worst `abs` delta) |
 | `--usage-file PATH` | YAML/JSON planned usage |
 | `--usage-metric KEY=VALUE` | Default usage overrides (repeatable) |
 | `--catalog PATH` | Override vendored `prices.json` |
@@ -101,6 +101,9 @@ python scripts/refresh_catalog.py
 
 Edit `data/prices.json` (and mirror `src/nebius_tf_cost/data/prices.json`), then re-run tests. Do not commit credentials — this tool never needs them.
 
-## Assumptions
+## Min vs max
 
-See [ASSUMPTIONS.md](ASSUMPTIONS.md).
+- **min** — optimistic (spot floors / known rates; autoscaling `min_node_count`)
+- **max** — pessimistic (on-demand spot ceiling; autoscaling `max_node_count`); budget uses this
+
+See [ASSUMPTIONS.md](ASSUMPTIONS.md) for full semantics.

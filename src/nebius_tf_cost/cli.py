@@ -70,9 +70,7 @@ exit codes:
         "--on-exceed",
         choices=["warn", "fail"],
         default="warn",
-        help=(
-            "When the max (pessimistic) estimate exceeds budget: warn (exit 0) or fail (exit 2)"
-        ),
+        help=("When the max (pessimistic) estimate exceeds budget: warn (exit 0) or fail (exit 2)"),
     )
     est.add_argument(
         "--budget-compare",

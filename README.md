@@ -1,1 +1,104 @@
-# nebius-tf-cost-estimate
+# nebius-tf-cost
+
+Estimate **Nebius AI Cloud** costs from Terraform **plan** or **state** JSON — no Nebius account credentials required.
+
+Uses a vendored public price catalog (`data/prices.json`) derived from [Nebius docs](https://docs.nebius.com/llms.txt). Supports total estimates, plan deltas, budget warn/fail gates, hour/month/year periods, and planned usage for usage-based resources (Object Storage).
+
+## Install
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+## Demo
+
+```bash
+# From a terraform plan JSON:
+terraform plan -out=tfplan
+terraform show -json tfplan > plan.json
+
+nebius-tf-cost estimate \
+  --plan examples/sample-plan.json \
+  --usage-file examples/usage.yaml \
+  --period month \
+  --budget 5000 \
+  --on-exceed warn
+```
+
+Expected: prints before/after/delta line items, warnings for unpriced or zero-usage resources, and a budget verdict.
+
+## CI-friendly test command
+
+```bash
+pip install -e ".[dev]"
+python -m pytest
+ruff check src tests scripts
+ruff format --check src tests scripts
+```
+
+Or as a single gate:
+
+```bash
+python -m pytest && ruff check src tests scripts && ruff format --check src tests scripts
+```
+
+## Flags (summary)
+
+| Flag | Description |
+|------|-------------|
+| `--plan` / `--state` / `--input` | Terraform JSON source (mutually exclusive) |
+| `--period hour\|month\|year` | Totals period (`month` = 730h per Nebius docs) |
+| `--currency USD\|ILS` | Catalog currency |
+| `--budget AMOUNT` | Budget in `--currency` for the selected period |
+| `--on-exceed warn\|fail` | `warn` → exit 0 + message; `fail` → exit 2 |
+| `--budget-compare after\|delta\|abs_delta` | Which figure to gate |
+| `--usage-file PATH` | YAML/JSON planned usage |
+| `--usage-metric KEY=VALUE` | Default usage overrides (repeatable) |
+| `--catalog PATH` | Override vendored `prices.json` |
+| `--preemptible-policy on_demand\|floor\|reject` | Spot/preemptible pricing policy |
+| `--json` | Machine-readable report |
+| `--include-zero` | Show free/zero line items |
+
+```bash
+nebius-tf-cost estimate --help
+```
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success (budget OK, or exceed with `warn`) |
+| 2 | Budget exceeded with `--on-exceed fail` |
+| 64 | Bad flags / missing input paths |
+| 65 | Invalid plan/state/catalog/usage data |
+| 70 | Unexpected internal error |
+
+## Module layout
+
+| Module | Responsibility |
+|--------|----------------|
+| `cli.py` | argparse, formatting, exit codes |
+| `config.py` | Typed `EstimateConfig` / `PlannedUsage` |
+| `catalog.py` | Load vendored prices |
+| `terraform.py` | Parse plan/state JSON |
+| `estimate.py` | Resource estimators + totals/delta |
+| `budget.py` | Budget gate |
+| `usage.py` | Planned usage file/flags |
+| `periods.py` | hour/month/year scaling |
+| `errors.py` | Structured errors + exit codes |
+
+Extension point: register a new estimator in `estimate.ESTIMATORS` for additional `nebius_*` resource types.
+
+## Refreshing prices
+
+```bash
+python scripts/refresh_catalog.py
+```
+
+Edit `data/prices.json` (and mirror `src/nebius_tf_cost/data/prices.json`), then re-run tests. Do not commit credentials — this tool never needs them.
+
+## Assumptions
+
+See [ASSUMPTIONS.md](ASSUMPTIONS.md).

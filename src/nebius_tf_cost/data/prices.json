@@ -1,0 +1,214 @@
+{
+  "meta": {
+    "currency_default": "USD",
+    "fetched_at": "2026-11-25T20:15:37Z",
+    "month_hours": 730,
+    "year_hours": 8760,
+    "sources": [
+      "https://docs.nebius.com/compute/resources/pricing.md",
+      "https://docs.nebius.com/object-storage/resources/pricing.md",
+      "https://docs.nebius.com/vpc/resources/pricing.md",
+      "https://docs.nebius.com/kubernetes/resources/pricing.md",
+      "https://docs.nebius.com/postgresql/resources/pricing.md",
+      "https://docs.nebius.com/mlflow/resources/pricing.md",
+      "https://docs.nebius.com/container-registry/resources/pricing.md",
+      "https://docs.nebius.com/kms/resources/pricing.md",
+      "https://docs.nebius.com/tunnels/resources/pricing.md",
+      "https://docs.nebius.com/compute/virtual-machines/types.md"
+    ],
+    "notes": [
+      "Prices are published list rates without taxes/VAT.",
+      "Spot/preemptible GPU prices for many platforms are dynamic; catalog stores on-demand rates and optional floor hints.",
+      "Refresh with: python scripts/refresh_catalog.py (manual review recommended)."
+    ]
+  },
+  "currencies": ["USD", "ILS"],
+  "compute_platforms": {
+    "gpu-b300-sxm": {
+      "billing": "gpu_only",
+      "gpu_hour_usd": 9.5,
+      "gpu_hour_ils": 29.45,
+      "preemptible_floor_usd": 0.99,
+      "preemptible_floor_ils": 3.069
+    },
+    "gpu-b200-sxm": {
+      "billing": "gpu_only",
+      "gpu_hour_usd": 8.5,
+      "gpu_hour_ils": 26.35,
+      "preemptible_floor_usd": 0.99,
+      "preemptible_floor_ils": 3.069
+    },
+    "gpu-b200-sxm-a": {
+      "billing": "gpu_only",
+      "gpu_hour_usd": 8.5,
+      "gpu_hour_ils": 26.35,
+      "preemptible_floor_usd": 0.99,
+      "preemptible_floor_ils": 3.069
+    },
+    "gpu-h200-sxm": {
+      "billing": "gpu_only",
+      "gpu_hour_usd": 5.4,
+      "gpu_hour_ils": 16.74,
+      "preemptible_floor_usd": 0.79,
+      "preemptible_floor_ils": 2.449
+    },
+    "gpu-h100-sxm": {
+      "billing": "gpu_only",
+      "gpu_hour_usd": 4.5,
+      "gpu_hour_ils": 13.95,
+      "preemptible_floor_usd": 0.79,
+      "preemptible_floor_ils": 2.449
+    },
+    "gpu-rtx6000": {
+      "billing": "gpu_only",
+      "gpu_hour_usd": 1.8,
+      "gpu_hour_ils": 5.58,
+      "preemptible_floor_usd": 0.79,
+      "preemptible_floor_ils": 2.449
+    },
+    "gpu-rtx6000-a": {
+      "billing": "gpu_only",
+      "gpu_hour_usd": 1.8,
+      "gpu_hour_ils": 5.58,
+      "preemptible_floor_usd": 0.79,
+      "preemptible_floor_ils": 2.449
+    },
+    "gpu-l40s-a": {
+      "billing": "components",
+      "gpu_hour_usd": 1.35,
+      "cpu_hour_usd": 0.012,
+      "ram_gib_hour_usd": 0.0032,
+      "gpu_hour_ils": 4.185,
+      "cpu_hour_ils": 0.0372,
+      "ram_gib_hour_ils": 0.00992,
+      "preemptible": {
+        "gpu_hour_usd": 0.65,
+        "cpu_hour_usd": 0.006,
+        "ram_gib_hour_usd": 0.0016,
+        "gpu_hour_ils": 2.015,
+        "cpu_hour_ils": 0.0186,
+        "ram_gib_hour_ils": 0.00496
+      }
+    },
+    "gpu-l40s-d": {
+      "billing": "components",
+      "gpu_hour_usd": 1.35,
+      "cpu_hour_usd": 0.01,
+      "ram_gib_hour_usd": 0.0032,
+      "gpu_hour_ils": 4.185,
+      "cpu_hour_ils": 0.031,
+      "ram_gib_hour_ils": 0.00992,
+      "preemptible": {
+        "gpu_hour_usd": 0.65,
+        "cpu_hour_usd": 0.005,
+        "ram_gib_hour_usd": 0.0016,
+        "gpu_hour_ils": 2.015,
+        "cpu_hour_ils": 0.0155,
+        "ram_gib_hour_ils": 0.00496
+      }
+    },
+    "cpu-d3": {
+      "billing": "components",
+      "cpu_hour_usd": 0.015,
+      "ram_gib_hour_usd": 0.0045,
+      "cpu_hour_ils": 0.0465,
+      "ram_gib_hour_ils": 0.01395
+    },
+    "cpu-e2": {
+      "billing": "components",
+      "cpu_hour_usd": 0.012,
+      "ram_gib_hour_usd": 0.0045,
+      "cpu_hour_ils": 0.0372,
+      "ram_gib_hour_ils": 0.01395
+    }
+  },
+  "disks_gib_month": {
+    "NETWORK_SSD": { "usd": 0.071, "ils": 0.221 },
+    "NETWORK_SSD_NON_REPLICATED": { "usd": 0.053, "ils": 0.164 },
+    "NETWORK_SSD_IO_M3": { "usd": 0.118, "ils": 0.366 },
+    "NETWORK_HDD": { "usd": null, "ils": null, "note": "No public list price found in compute pricing as of catalog fetch" }
+  },
+  "disk_snapshot_gib_month": { "usd": 0.071, "ils": 0.22 },
+  "filesystem_gib_month": {
+    "NETWORK_SSD": { "usd": 0.08, "ils": 0.248 },
+    "NETWORK_HDD": { "usd": null, "ils": null, "note": "No public list price found" },
+    "WEKA": { "usd": null, "ils": null, "note": "No public list price found" },
+    "VAST": { "usd": null, "ils": null, "note": "No public list price found" }
+  },
+  "local_ssd_gib_month": { "usd": 0.065, "ils": 0.2015 },
+  "object_storage": {
+    "storage_gib_month": {
+      "STANDARD": { "usd": 0.0147, "ils": 0.046 },
+      "ENHANCED_THROUGHPUT": { "usd": 0.11, "ils": 0.341 },
+      "INTELLIGENT_WARM": { "usd": 0.03, "ils": 0.093 },
+      "INTELLIGENT_COLD": { "usd": 0.01, "ils": 0.031 }
+    },
+    "requests_per_1000": {
+      "STANDARD_CLASS_A": { "usd": 0.0034, "ils": 0.01054 },
+      "STANDARD_CLASS_B": { "usd": 0.00028, "ils": 0.000868 },
+      "ENHANCED_THROUGHPUT_CLASS_A": { "usd": 0.0, "ils": 0.0 },
+      "ENHANCED_THROUGHPUT_CLASS_B": { "usd": 0.0, "ils": 0.0 },
+      "INTELLIGENT_CLASS_A": { "usd": 0.0, "ils": 0.0 },
+      "INTELLIGENT_CLASS_B": { "usd": 0.0, "ils": 0.0 }
+    },
+    "egress_gib": {
+      "STANDARD": { "usd": 0.015, "ils": 0.0465 },
+      "ENHANCED_THROUGHPUT": { "usd": 0.0, "ils": 0.0 },
+      "INTELLIGENT_OVER_3X": { "usd": 0.05, "ils": 0.155 }
+    }
+  },
+  "postgresql": {
+    "cpu_hour": { "usd": 0.034, "ils": 0.1054 },
+    "ram_gib_hour": { "usd": 0.009, "ils": 0.0279 },
+    "disk_gib_month": { "usd": 0.071, "ils": 0.221 }
+  },
+  "mlflow": {
+    "cpu_hour": { "usd": 0.03, "ils": 0.093 },
+    "ram_gib_hour": { "usd": 0.0075, "ils": 0.02325 },
+    "sizes": {
+      "small": { "vcpu": 6, "ram_gib": 24 },
+      "medium": { "vcpu": 8, "ram_gib": 32 }
+    }
+  },
+  "free_resource_types": [
+    "nebius_vpc_v1_network",
+    "nebius_vpc_v1_subnet",
+    "nebius_vpc_v1_pool",
+    "nebius_vpc_v1_route",
+    "nebius_vpc_v1_route_table",
+    "nebius_vpc_v1_security_group",
+    "nebius_vpc_v1_security_rule",
+    "nebius_vpc_v1alpha1_allocation",
+    "nebius_registry_v1_registry",
+    "nebius_kms_v1_asymmetric_key",
+    "nebius_kms_v1_symmetric_key",
+    "nebius_tunnel_v1_tunnel",
+    "nebius_compute_v1_gpu_cluster",
+    "nebius_dns_v1_zone",
+    "nebius_dns_v1_record",
+    "nebius_iam_v1_service_account",
+    "nebius_iam_v1_group",
+    "nebius_iam_v1_group_membership",
+    "nebius_iam_v1_access_permit",
+    "nebius_iam_v1_auth_public_key",
+    "nebius_iam_v1_federation",
+    "nebius_iam_v1_federation_certificate",
+    "nebius_iam_v1_federated_credentials",
+    "nebius_iam_v1_invitation",
+    "nebius_iam_v2_access_key",
+    "nebius_iam_v2_project",
+    "nebius_mysterybox_v1_secret",
+    "nebius_mysterybox_v1_secret_version",
+    "nebius_billing_v1_pricing_policy",
+    "nebius_quotas_v1_quota_allowance",
+    "nebius_capacity_v1_capacity_allowance",
+    "nebius_mk8s_v1_cluster",
+    "nebius_mk8s_v1alpha1_cluster"
+  ],
+  "unsupported_priced_elsewhere": {
+    "nebius_mk8s_v1_node_group": "Nodes billed as Compute VMs; estimate via node template attrs when present, else unknown",
+    "nebius_mk8s_v1alpha1_node_group": "Nodes billed as Compute VMs",
+    "nebius_ai_v1_endpoint": "Serverless AI billed as Compute while running",
+    "nebius_applications_v1alpha1_k8s_release": "Underlying cluster/node costs only"
+  }
+}

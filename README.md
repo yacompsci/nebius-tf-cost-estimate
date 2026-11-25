@@ -2,7 +2,7 @@
 
 Estimate **Nebius AI Cloud** costs from Terraform **plan** or **state** JSON — no Nebius account credentials required.
 
-Uses a vendored public price catalog (`data/prices.json`) derived from [Nebius docs](https://docs.nebius.com/llms.txt). Supports total estimates, plan deltas, budget warn/fail gates, hour/month/year periods, and planned usage for usage-based resources (Object Storage).
+Uses a vendored public price catalog (`data/prices.json`) derived from [Nebius docs](https://docs.nebius.com/llms.txt). Supports total estimates, plan deltas, budget warn/fail gates, hour/month/year periods, and planned usage for usage-based resources (Object Storage, MK8s node counts, Serverless AI duty cycle, local SSD size).
 
 ## Install
 
@@ -90,6 +90,8 @@ nebius-tf-cost estimate --help
 | `errors.py` | Structured errors + exit codes |
 
 Extension point: register a new estimator in `estimate.ESTIMATORS` for additional `nebius_*` resource types.
+
+Covered estimators include Compute instances/disks/snapshots/filesystems, Object Storage buckets, VPC allocations, Managed PostgreSQL, Managed MLflow, **MK8s node groups**, and **Serverless AI endpoints**. Free/control-plane types are listed in the catalog `free_resource_types`.
 
 ## Refreshing prices
 

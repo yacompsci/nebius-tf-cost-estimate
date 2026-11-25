@@ -26,7 +26,14 @@ URLS = [
     "https://docs.nebius.com/postgresql/resources/pricing.md",
     "https://docs.nebius.com/mlflow/resources/pricing.md",
     "https://docs.nebius.com/kubernetes/resources/pricing.md",
+    "https://docs.nebius.com/container-registry/resources/pricing.md",
+    "https://docs.nebius.com/kms/resources/pricing.md",
+    "https://docs.nebius.com/tunnels/resources/pricing.md",
+    "https://docs.nebius.com/serverless/pricing-quotas.md",
+    "https://docs.nebius.com/observability/resources/pricing.md",
+    "https://docs.nebius.com/slurm-soperator/managed-soperator/resources/pricing.md",
     "https://docs.nebius.com/compute/virtual-machines/types.md",
+    "https://docs.nebius.com/compute/storage/types.md",
 ]
 
 

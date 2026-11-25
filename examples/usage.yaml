@@ -11,6 +11,14 @@ resources:
     class_b_requests: 50000   # GET/HEAD count in the period
     egress_gib: 100           # GiB egress to internet / other region
 
+  # Optional MK8s / Serverless / local SSD overlays:
+  # nebius_mk8s_v1_node_group.workers:
+  #   node_count: 4
+  # nebius_ai_v1_endpoint.api:
+  #   running_fraction: 0.5   # 50% of the period running
+  # nebius_compute_v1_instance.trainer:
+  #   local_ssd_gib: 3500
+
 # Optional: match by resource name instead of full address
 # by_name:
 #   datasets:

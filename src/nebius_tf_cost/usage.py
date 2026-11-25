@@ -19,6 +19,9 @@ KNOWN_METRICS = frozenset(
         "class_b_requests",
         "egress_gib",
         "intelligent_tier",  # 0=warm (default), 1=cold — stored as float for uniformity
+        "node_count",  # MK8s node group size override (autoscaling)
+        "running_fraction",  # Serverless AI endpoint duty cycle 0..1
+        "local_ssd_gib",  # Local SSD GiB when local_disks requested
     }
 )
 

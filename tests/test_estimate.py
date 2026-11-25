@@ -96,3 +96,94 @@ def test_period_scales_linearly(catalog, fixtures_dir: Path) -> None:
     hour = run_estimate(doc, catalog, hour_cfg, usage)
     month = run_estimate(doc, catalog, month_cfg, usage)
     assert month.after_total == pytest.approx(hour.after_total * 730, rel=1e-6)
+
+
+def test_mk8s_node_group_and_serverless(catalog, fixtures_dir: Path) -> None:
+    doc = detect_and_load(fixtures_dir / "plan_coverage.json")
+    cfg = EstimateConfig(
+        input_path=fixtures_dir / "plan_coverage.json",
+        period="month",
+        currency="USD",
+        mode="plan",
+    )
+    result = run_estimate(doc, catalog, cfg, PlannedUsage())
+
+    workers = next(i for i in result.after_items if i.address.endswith(".workers"))
+    # 3 nodes × (cpu-e2 2vcpu-8gb = 0.06 $/h × 730 = 43.8) + boot 64×0.071
+    per_node = 43.8 + (64 * 0.071)
+    assert workers.amount == pytest.approx(3 * per_node, rel=1e-6)
+    assert workers.unknown is False
+
+    endpoint = next(i for i in result.after_items if i.address.endswith(".api"))
+    # H100 gpu-only: 4.5 $/h × 730 + disk 100×0.071
+    assert endpoint.amount == pytest.approx(4.5 * 730 + 100 * 0.071, rel=1e-6)
+
+    hdd = next(i for i in result.after_items if i.address.endswith(".hdd"))
+    assert hdd.unknown is True
+    assert hdd.amount == 0.0
+    assert any("NETWORK_HDD" in w for w in hdd.warnings)
+
+    weka = next(i for i in result.after_items if i.address.endswith(".weka"))
+    assert weka.unknown is True
+    assert any("WEKA" in w for w in weka.warnings)
+
+    nvl = next(i for i in result.after_items if i.address.endswith(".gb"))
+    assert nvl.amount == 0.0
+    assert nvl.unknown is False  # free control-plane handle
+
+    cluster = next(i for i in result.after_items if i.address.endswith(".main"))
+    assert cluster.amount == 0.0
+
+
+def test_node_group_usage_override(catalog, fixtures_dir: Path) -> None:
+    doc = detect_and_load(fixtures_dir / "plan_coverage.json")
+    cfg = EstimateConfig(
+        input_path=fixtures_dir / "plan_coverage.json",
+        period="hour",
+        currency="USD",
+        mode="plan",
+    )
+    usage = PlannedUsage(by_address={"nebius_mk8s_v1_node_group.workers": {"node_count": 1}})
+    result = run_estimate(doc, catalog, cfg, usage)
+    workers = next(i for i in result.after_items if i.address.endswith(".workers"))
+    assert workers.amount == pytest.approx(0.06 + (64 * 0.071) / 730, rel=1e-6)
+
+
+def test_serverless_running_fraction(catalog, fixtures_dir: Path) -> None:
+    doc = detect_and_load(fixtures_dir / "plan_coverage.json")
+    cfg = EstimateConfig(
+        input_path=fixtures_dir / "plan_coverage.json",
+        period="hour",
+        currency="USD",
+        mode="plan",
+    )
+    usage = PlannedUsage(by_address={"nebius_ai_v1_endpoint.api": {"running_fraction": 0.0}})
+    result = run_estimate(doc, catalog, cfg, usage)
+    endpoint = next(i for i in result.after_items if i.address.endswith(".api"))
+    assert endpoint.amount == pytest.approx(0.0, abs=1e-12)
+
+
+def test_ai_gpu_selector_mapping(catalog, fixtures_dir: Path) -> None:
+    from nebius_tf_cost.estimate import estimate_ai_endpoint
+    from nebius_tf_cost.terraform import ResourceSnapshot
+
+    snap = ResourceSnapshot(
+        address="nebius_ai_v1_endpoint.sel",
+        type="nebius_ai_v1_endpoint",
+        name="sel",
+        provider_name="registry.terraform.io/nebius/nebius",
+        side="after",
+        values={
+            "gpu": ["H100:2"],
+            "disk": {"type": "NETWORK_SSD", "size_gibibytes": 50},
+        },
+    )
+    cfg = EstimateConfig(
+        input_path=fixtures_dir / "plan_coverage.json",
+        period="hour",
+        currency="USD",
+        mode="plan",
+    )
+    item = estimate_ai_endpoint(snap, catalog, cfg, PlannedUsage())
+    assert item.unknown is False
+    assert item.amount == pytest.approx(2 * 4.5 + (50 * 0.071) / 730, rel=1e-6)

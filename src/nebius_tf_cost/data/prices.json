@@ -1,7 +1,7 @@
 {
   "meta": {
     "currency_default": "USD",
-    "fetched_at": "2026-11-25T20:15:37Z",
+    "fetched_at": "2026-11-25T20:51:55Z",
     "month_hours": 730,
     "year_hours": 8760,
     "sources": [
@@ -14,15 +14,24 @@
       "https://docs.nebius.com/container-registry/resources/pricing.md",
       "https://docs.nebius.com/kms/resources/pricing.md",
       "https://docs.nebius.com/tunnels/resources/pricing.md",
-      "https://docs.nebius.com/compute/virtual-machines/types.md"
+      "https://docs.nebius.com/serverless/pricing-quotas.md",
+      "https://docs.nebius.com/observability/resources/pricing.md",
+      "https://docs.nebius.com/slurm-soperator/managed-soperator/resources/pricing.md",
+      "https://docs.nebius.com/compute/virtual-machines/types.md",
+      "https://docs.nebius.com/compute/storage/types.md"
     ],
     "notes": [
       "Prices are published list rates without taxes/VAT.",
       "Spot/preemptible GPU prices for many platforms are dynamic; catalog stores on-demand rates and optional floor hints.",
+      "NETWORK_HDD, WEKA, and VAST have no public list price in compute pricing as of catalog fetch \u2014 estimators emit unknown warnings.",
+      "Serverless AI and MK8s nodes bill as Compute; Observability is free while in preview.",
       "Refresh with: python scripts/refresh_catalog.py (manual review recommended)."
     ]
   },
-  "currencies": ["USD", "ILS"],
+  "currencies": [
+    "USD",
+    "ILS"
+  ],
   "compute_platforms": {
     "gpu-b300-sxm": {
       "billing": "gpu_only",
@@ -123,92 +132,206 @@
     }
   },
   "disks_gib_month": {
-    "NETWORK_SSD": { "usd": 0.071, "ils": 0.221 },
-    "NETWORK_SSD_NON_REPLICATED": { "usd": 0.053, "ils": 0.164 },
-    "NETWORK_SSD_IO_M3": { "usd": 0.118, "ils": 0.366 },
-    "NETWORK_HDD": { "usd": null, "ils": null, "note": "No public list price found in compute pricing as of catalog fetch" }
+    "NETWORK_SSD": {
+      "usd": 0.071,
+      "ils": 0.221
+    },
+    "NETWORK_SSD_NON_REPLICATED": {
+      "usd": 0.053,
+      "ils": 0.164
+    },
+    "NETWORK_SSD_IO_M3": {
+      "usd": 0.118,
+      "ils": 0.366
+    },
+    "NETWORK_HDD": {
+      "usd": null,
+      "ils": null,
+      "note": "No public list price in compute pricing as of catalog fetch"
+    }
   },
-  "disk_snapshot_gib_month": { "usd": 0.071, "ils": 0.22 },
+  "disk_snapshot_gib_month": {
+    "usd": 0.071,
+    "ils": 0.22
+  },
   "filesystem_gib_month": {
-    "NETWORK_SSD": { "usd": 0.08, "ils": 0.248 },
-    "NETWORK_HDD": { "usd": null, "ils": null, "note": "No public list price found" },
-    "WEKA": { "usd": null, "ils": null, "note": "No public list price found" },
-    "VAST": { "usd": null, "ils": null, "note": "No public list price found" }
+    "NETWORK_SSD": {
+      "usd": 0.08,
+      "ils": 0.248
+    },
+    "NETWORK_HDD": {
+      "usd": null,
+      "ils": null,
+      "note": "No public list price in compute pricing as of catalog fetch"
+    },
+    "WEKA": {
+      "usd": null,
+      "ils": null,
+      "note": "No public list price in compute pricing as of catalog fetch"
+    },
+    "VAST": {
+      "usd": null,
+      "ils": null,
+      "note": "No public list price in compute pricing as of catalog fetch"
+    }
   },
-  "local_ssd_gib_month": { "usd": 0.065, "ils": 0.2015 },
+  "local_ssd_gib_month": {
+    "usd": 0.065,
+    "ils": 0.2015
+  },
   "object_storage": {
     "storage_gib_month": {
-      "STANDARD": { "usd": 0.0147, "ils": 0.046 },
-      "ENHANCED_THROUGHPUT": { "usd": 0.11, "ils": 0.341 },
-      "INTELLIGENT_WARM": { "usd": 0.03, "ils": 0.093 },
-      "INTELLIGENT_COLD": { "usd": 0.01, "ils": 0.031 }
+      "STANDARD": {
+        "usd": 0.0147,
+        "ils": 0.046
+      },
+      "ENHANCED_THROUGHPUT": {
+        "usd": 0.11,
+        "ils": 0.341
+      },
+      "INTELLIGENT_WARM": {
+        "usd": 0.03,
+        "ils": 0.093
+      },
+      "INTELLIGENT_COLD": {
+        "usd": 0.01,
+        "ils": 0.031
+      }
     },
     "requests_per_1000": {
-      "STANDARD_CLASS_A": { "usd": 0.0034, "ils": 0.01054 },
-      "STANDARD_CLASS_B": { "usd": 0.00028, "ils": 0.000868 },
-      "ENHANCED_THROUGHPUT_CLASS_A": { "usd": 0.0, "ils": 0.0 },
-      "ENHANCED_THROUGHPUT_CLASS_B": { "usd": 0.0, "ils": 0.0 },
-      "INTELLIGENT_CLASS_A": { "usd": 0.0, "ils": 0.0 },
-      "INTELLIGENT_CLASS_B": { "usd": 0.0, "ils": 0.0 }
+      "STANDARD_CLASS_A": {
+        "usd": 0.0034,
+        "ils": 0.01054
+      },
+      "STANDARD_CLASS_B": {
+        "usd": 0.00028,
+        "ils": 0.000868
+      },
+      "ENHANCED_THROUGHPUT_CLASS_A": {
+        "usd": 0.0,
+        "ils": 0.0
+      },
+      "ENHANCED_THROUGHPUT_CLASS_B": {
+        "usd": 0.0,
+        "ils": 0.0
+      },
+      "INTELLIGENT_CLASS_A": {
+        "usd": 0.0,
+        "ils": 0.0
+      },
+      "INTELLIGENT_CLASS_B": {
+        "usd": 0.0,
+        "ils": 0.0
+      }
     },
     "egress_gib": {
-      "STANDARD": { "usd": 0.015, "ils": 0.0465 },
-      "ENHANCED_THROUGHPUT": { "usd": 0.0, "ils": 0.0 },
-      "INTELLIGENT_OVER_3X": { "usd": 0.05, "ils": 0.155 }
+      "STANDARD": {
+        "usd": 0.015,
+        "ils": 0.0465
+      },
+      "ENHANCED_THROUGHPUT": {
+        "usd": 0.0,
+        "ils": 0.0
+      },
+      "INTELLIGENT_OVER_3X": {
+        "usd": 0.05,
+        "ils": 0.155
+      }
     }
   },
   "postgresql": {
-    "cpu_hour": { "usd": 0.034, "ils": 0.1054 },
-    "ram_gib_hour": { "usd": 0.009, "ils": 0.0279 },
-    "disk_gib_month": { "usd": 0.071, "ils": 0.221 }
+    "cpu_hour": {
+      "usd": 0.034,
+      "ils": 0.1054
+    },
+    "ram_gib_hour": {
+      "usd": 0.009,
+      "ils": 0.0279
+    },
+    "disk_gib_month": {
+      "usd": 0.071,
+      "ils": 0.221
+    }
   },
   "mlflow": {
-    "cpu_hour": { "usd": 0.03, "ils": 0.093 },
-    "ram_gib_hour": { "usd": 0.0075, "ils": 0.02325 },
+    "cpu_hour": {
+      "usd": 0.03,
+      "ils": 0.093
+    },
+    "ram_gib_hour": {
+      "usd": 0.0075,
+      "ils": 0.02325
+    },
     "sizes": {
-      "small": { "vcpu": 6, "ram_gib": 24 },
-      "medium": { "vcpu": 8, "ram_gib": 32 }
+      "small": {
+        "vcpu": 6,
+        "ram_gib": 24
+      },
+      "medium": {
+        "vcpu": 8,
+        "ram_gib": 32
+      }
     }
   },
   "free_resource_types": [
+    "nebius_applications_v1alpha1_k8s_release",
+    "nebius_billing_v1_pricing_policy",
+    "nebius_capacity_v1_capacity_allowance",
+    "nebius_compute_v1_gpu_cluster",
+    "nebius_compute_v1_nvl_instance_group",
+    "nebius_dns_v1_record",
+    "nebius_dns_v1_zone",
+    "nebius_hash",
+    "nebius_iam_v1_access_permit",
+    "nebius_iam_v1_auth_public_key",
+    "nebius_iam_v1_federated_credentials",
+    "nebius_iam_v1_federation",
+    "nebius_iam_v1_federation_certificate",
+    "nebius_iam_v1_group",
+    "nebius_iam_v1_group_membership",
+    "nebius_iam_v1_invitation",
+    "nebius_iam_v1_service_account",
+    "nebius_iam_v2_access_key",
+    "nebius_iam_v2_project",
+    "nebius_kms_v1_asymmetric_key",
+    "nebius_kms_v1_symmetric_key",
+    "nebius_mk8s_v1_cluster",
+    "nebius_mk8s_v1alpha1_cluster",
+    "nebius_mysterybox_v1_secret",
+    "nebius_mysterybox_v1_secret_version",
+    "nebius_quotas_v1_quota_allowance",
+    "nebius_registry_v1_registry",
+    "nebius_storage_v1_inventory",
+    "nebius_storage_v1_transfer",
+    "nebius_storage_v1alpha1_transfer",
+    "nebius_tunnel_v1_tunnel",
     "nebius_vpc_v1_network",
-    "nebius_vpc_v1_subnet",
     "nebius_vpc_v1_pool",
     "nebius_vpc_v1_route",
     "nebius_vpc_v1_route_table",
     "nebius_vpc_v1_security_group",
     "nebius_vpc_v1_security_rule",
-    "nebius_vpc_v1alpha1_allocation",
-    "nebius_registry_v1_registry",
-    "nebius_kms_v1_asymmetric_key",
-    "nebius_kms_v1_symmetric_key",
-    "nebius_tunnel_v1_tunnel",
-    "nebius_compute_v1_gpu_cluster",
-    "nebius_dns_v1_zone",
-    "nebius_dns_v1_record",
-    "nebius_iam_v1_service_account",
-    "nebius_iam_v1_group",
-    "nebius_iam_v1_group_membership",
-    "nebius_iam_v1_access_permit",
-    "nebius_iam_v1_auth_public_key",
-    "nebius_iam_v1_federation",
-    "nebius_iam_v1_federation_certificate",
-    "nebius_iam_v1_federated_credentials",
-    "nebius_iam_v1_invitation",
-    "nebius_iam_v2_access_key",
-    "nebius_iam_v2_project",
-    "nebius_mysterybox_v1_secret",
-    "nebius_mysterybox_v1_secret_version",
-    "nebius_billing_v1_pricing_policy",
-    "nebius_quotas_v1_quota_allowance",
-    "nebius_capacity_v1_capacity_allowance",
-    "nebius_mk8s_v1_cluster",
-    "nebius_mk8s_v1alpha1_cluster"
+    "nebius_vpc_v1_subnet",
+    "nebius_vpc_v1alpha1_allocation"
   ],
   "unsupported_priced_elsewhere": {
-    "nebius_mk8s_v1_node_group": "Nodes billed as Compute VMs; estimate via node template attrs when present, else unknown",
-    "nebius_mk8s_v1alpha1_node_group": "Nodes billed as Compute VMs",
-    "nebius_ai_v1_endpoint": "Serverless AI billed as Compute while running",
-    "nebius_applications_v1alpha1_k8s_release": "Underlying cluster/node costs only"
+    "nebius_compute_v1_nvl_instance_group": "NVLink instance group is a capacity handle; member Compute instances bill separately. GB200/GB300 platform list prices were not published in compute pricing at catalog fetch."
+  },
+  "unpriced_gaps": {
+    "NETWORK_HDD": "Disk and filesystem type present in Terraform; no public USD/ILS list price",
+    "WEKA": "Shared filesystem type; no public list price",
+    "VAST": "Shared filesystem type; no public list price",
+    "GB200/GB300": "NVL instance group types; no public per-GPU list price in compute pricing page",
+    "Object Storage transfer volume": "Transfer resource itself is free of a service fee; egress/storage billed on buckets via usage metrics"
+  },
+  "usage_metrics": {
+    "stored_gib": "Object Storage average stored GiB for the estimate window",
+    "class_a_requests": "Object Storage PUT/POST/DELETE count for the window",
+    "class_b_requests": "Object Storage GET/HEAD count for the window",
+    "egress_gib": "Object Storage egress GiB to internet / other region",
+    "intelligent_tier": ">=1 selects Intelligent cold storage rate",
+    "node_count": "Override MK8s node group size (esp. autoscaling)",
+    "running_fraction": "Serverless AI endpoint duty cycle 0..1 (default 1)",
+    "local_ssd_gib": "Local SSD GiB when local_disks requested (size not in Terraform)"
   }
 }

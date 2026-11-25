@@ -51,6 +51,13 @@ Or as a single gate:
 python -m pytest && ruff check src tests scripts && ruff format --check src tests scripts
 ```
 
+Default `pytest` excludes `@pytest.mark.e2e` (offline/fast). Plan-only Terraform e2e (real `init`/`plan`/`show -json` → estimate; **no** Nebius credentials, **never** `apply`) lives under `tests/e2e/terraform/`:
+
+```bash
+# requires terraform on PATH; skips locally if missing
+python -m pytest -m e2e -o addopts=-q
+```
+
 ## Flags (summary)
 
 | Flag | Description |

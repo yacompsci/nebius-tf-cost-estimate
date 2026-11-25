@@ -1,0 +1,9 @@
+# Planned usage for usage-based resources in the e2e Terraform stack.
+defaults: {}
+
+resources:
+  nebius_storage_v1_bucket.datasets:
+    stored_gib: 100
+    class_a_requests: 1000
+    class_b_requests: 5000
+    egress_gib: 10

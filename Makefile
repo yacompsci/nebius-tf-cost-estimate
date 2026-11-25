@@ -1,7 +1,10 @@
-.PHONY: test lint format check cov
+.PHONY: test lint format check cov e2e
 
 test:
 	python3 -m pytest
+
+e2e:
+	python3 -m pytest -m e2e -o addopts=-q
 
 lint:
 	ruff check src tests scripts

@@ -33,7 +33,11 @@ nebius_tf_cost = ["py.typed", "data/prices.json"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-q"
+# Default suite stays offline/fast; run e2e with: pytest -m e2e -o addopts=-q
+addopts = ["-q", "-m not e2e"]
+markers = [
+  "e2e: plan-only Terraform end-to-end (requires terraform CLI; no cloud credentials)",
+]
 
 [tool.ruff]
 line-length = 100

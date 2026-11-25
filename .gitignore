@@ -21,6 +21,9 @@ crash.log
 crash.*.log
 .terraform/
 .terraform.lock.hcl
+!tests/e2e/terraform/.terraform.lock.hcl
+*.tfplan
+tfplan
 *.pem
 *.key
 credentials*

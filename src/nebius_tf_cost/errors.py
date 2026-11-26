@@ -10,6 +10,7 @@ class ExitCode(IntEnum):
 
     OK = 0
     BUDGET_EXCEEDED = 2
+    STRICT_CHECK_FAILED = 2  # alias: unknown types / missing usage under --strict-check
     USAGE_ERROR = 64  # bad args / config / input shape
     DATA_ERROR = 65  # unreadable plan/state/catalog
     INTERNAL = 70

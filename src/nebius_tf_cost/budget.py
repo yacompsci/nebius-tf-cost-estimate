@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from nebius_tf_cost.config import OnExceed
 from nebius_tf_cost.errors import ExitCode
 from nebius_tf_cost.estimate import EstimateResult
 
@@ -17,15 +16,13 @@ class BudgetVerdict:
     exceeded: bool
     compared_amount: float
     budget: float
-    on_exceed: OnExceed
+    strict: bool
     compare_mode: CompareMode
     message: str
 
     @property
     def exit_code(self) -> ExitCode:
-        if not self.exceeded:
-            return ExitCode.OK
-        if self.on_exceed == "fail":
+        if self.exceeded and self.strict:
             return ExitCode.BUDGET_EXCEEDED
         return ExitCode.OK
 
@@ -45,14 +42,14 @@ def select_amount(result: EstimateResult, compare_mode: CompareMode) -> float:
 def evaluate_budget(
     result: EstimateResult,
     budget: float | None,
-    on_exceed: OnExceed,
     *,
+    strict: bool = False,
     compare_mode: CompareMode = "after",
 ) -> BudgetVerdict | None:
     """Return a verdict when a budget is set; otherwise None.
 
     Gate always uses the pessimistic (max) estimate so CI fails when the
-    upper bound exceeds the budget.
+    upper bound exceeds the budget under ``--strict-check``.
     """
     if budget is None:
         return None
@@ -61,7 +58,7 @@ def evaluate_budget(
     if exceeded:
         message = (
             f"budget exceeded (max): {amount:.4f} {result.currency}/{result.period} "
-            f"> {budget:.4f} (compare={compare_mode}, on-exceed={on_exceed})"
+            f"> {budget:.4f} (compare={compare_mode})"
         )
     else:
         message = (
@@ -72,7 +69,27 @@ def evaluate_budget(
         exceeded=exceeded,
         compared_amount=amount,
         budget=budget,
-        on_exceed=on_exceed,
+        strict=strict,
         compare_mode=compare_mode,
         message=message,
     )
+
+
+def strict_check_reasons(
+    result: EstimateResult,
+    verdict: BudgetVerdict | None,
+) -> list[str]:
+    """Human-readable reasons ``--strict-check`` should fail (empty = pass)."""
+    reasons: list[str] = []
+    if result.unknown_resources:
+        joined = ", ".join(result.unknown_resources)
+        reasons.append(f"unknown or unpriced Nebius resources present: {joined}")
+    if result.missing_usage_resources:
+        joined = ", ".join(result.missing_usage_resources)
+        reasons.append(
+            f"resources require planned usage to estimate (pass --usage-file / "
+            f"--usage-metric): {joined}"
+        )
+    if verdict is not None and verdict.exceeded:
+        reasons.append(verdict.message)
+    return reasons

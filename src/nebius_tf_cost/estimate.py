@@ -46,6 +46,7 @@ class LineItem:
     period: Period
     details: str
     unknown: bool = False
+    missing_usage: bool = False
     warnings: list[str] = field(default_factory=list)
     # Optimistic / pessimistic bounds. When omitted, both default to ``amount``.
     # ``amount`` is normalized to ``amount_max`` (budget / point estimate).
@@ -73,6 +74,7 @@ class EstimateResult:
     before_items: list[LineItem]
     after_items: list[LineItem]
     unknown_resources: list[str]
+    missing_usage_resources: list[str]
     warnings: list[str]
     catalog_path: str
     document_kind: str
@@ -124,6 +126,7 @@ def _line(
     amount: float,
     details: str,
     unknown: bool = False,
+    missing_usage: bool = False,
     warnings: list[str] | None = None,
     amount_min: float | None = None,
     amount_max: float | None = None,
@@ -138,6 +141,7 @@ def _line(
         period=cfg.period,
         details=details,
         unknown=unknown,
+        missing_usage=missing_usage,
         warnings=list(warnings or []),
         amount_min=amount_min,
         amount_max=amount_max,
@@ -477,11 +481,14 @@ def _local_ssd_amount(
     usage: PlannedUsage,
     *,
     resource_name: str = "",
-) -> tuple[float, list[str]]:
-    """Price local SSD when requested; size is not in Terraform — needs planned usage."""
+) -> tuple[float, list[str], bool]:
+    """Price local SSD when requested; size is not in Terraform — needs planned usage.
+
+    Returns ``(amount, warnings, missing_usage)``.
+    """
     local = values.get("local_disks") or {}
     if not isinstance(local, dict) or not local:
-        return 0.0, []
+        return 0.0, [], False
     passthrough = local.get("passthrough_group") or {}
     requested = False
     if isinstance(passthrough, dict) and passthrough.get("requested") is True:
@@ -490,20 +497,24 @@ def _local_ssd_amount(
         # Presence of local_disks block is enough to flag potential local SSD charges.
         requested = True
     if not requested:
-        return 0.0, []
+        return 0.0, [], False
 
     metrics = usage.for_resource(address, resource_name)
     size = float(metrics.get("local_ssd_gib", 0.0))
     if size <= 0:
-        return 0.0, [
-            f"{address}: local disks requested but local_ssd_gib usage not set; "
-            "local SSD cost assumed 0"
-        ]
+        return (
+            0.0,
+            [
+                f"{address}: local disks requested but local_ssd_gib usage not set; "
+                "local SSD cost assumed 0"
+            ],
+            True,
+        )
     rate = catalog.money(catalog.raw.get("local_ssd_gib_month"), cfg.currency)
     if rate is None:
-        return 0.0, [f"{address}: no catalog price for local SSD"]
+        return 0.0, [f"{address}: no catalog price for local SSD"], False
     amount = scale_monthly(rate * size, cfg.period, month_hours=catalog.month_hours)
-    return amount, []
+    return amount, [], False
 
 
 def estimate_instance(
@@ -560,7 +571,7 @@ def estimate_instance(
                 if disk_item.unknown:
                     warnings.append(f"{snap.address}: boot disk price unknown")
 
-    local_amount, local_warnings = _local_ssd_amount(
+    local_amount, local_warnings, local_missing = _local_ssd_amount(
         snap.address, values, catalog, cfg, usage, resource_name=snap.name
     )
     warnings.extend(local_warnings)
@@ -576,6 +587,7 @@ def estimate_instance(
         snap,
         cfg,
         amount=total_max,
+        missing_usage=local_missing,
         details=details,
         warnings=warnings,
         amount_min=total_min,
@@ -716,7 +728,9 @@ def estimate_bucket(
     intelligent_cold = float(metrics.get("intelligent_tier", 0.0)) >= 1.0
 
     warnings: list[str] = []
+    missing_usage = False
     if stored == 0 and class_a == 0 and class_b == 0 and egress == 0:
+        missing_usage = True
         warnings.append(
             f"{snap.address}: no planned usage; storage/request/egress cost assumed 0. "
             "Pass --usage-file or --usage-metric."
@@ -778,6 +792,7 @@ def estimate_bucket(
             f"class={storage_class} stored_gib={stored} "
             f"reqA={class_a} reqB={class_b} egress_gib={egress}"
         ),
+        missing_usage=missing_usage,
         warnings=warnings,
     )
 
@@ -925,8 +940,8 @@ def _node_group_count_range(
     usage: PlannedUsage,
     address: str,
     name: str,
-) -> tuple[int, int, list[str]]:
-    """Resolve node count range: (min, max).
+) -> tuple[int, int, list[str], bool]:
+    """Resolve node count range: (min, max, warnings, missing_usage).
 
     - usage ``node_count`` or ``fixed_node_count`` → min == max
     - autoscaling → min uses min_node_count (else initial); max uses max_node_count
@@ -936,12 +951,12 @@ def _node_group_count_range(
     metrics = usage.for_resource(address, name)
     if "node_count" in metrics:
         count = max(0, int(metrics["node_count"]))
-        return count, count, warnings
+        return count, count, warnings, False
 
     fixed = values.get("fixed_node_count")
     if isinstance(fixed, (int, float)):
         count = max(0, int(fixed))
-        return count, count, warnings
+        return count, count, warnings, False
 
     autoscaling = values.get("autoscaling") or {}
     if isinstance(autoscaling, dict) and autoscaling:
@@ -964,7 +979,12 @@ def _node_group_count_range(
             count_max = count_min
 
         if count_min is None and count_max is None:
-            return 0, 0, [f"{address}: autoscaling present but min/initial node count missing"]
+            return (
+                0,
+                0,
+                [f"{address}: autoscaling present but min/initial node count missing"],
+                True,
+            )
 
         if count_min is None:
             count_min = count_max or 0
@@ -977,9 +997,14 @@ def _node_group_count_range(
             f"{address}: autoscaling node group; min_nodes={count_min} max_nodes={count_max} "
             "(override with usage metric node_count)"
         )
-        return count_min, count_max, warnings
+        return count_min, count_max, warnings, False
 
-    return 0, 0, [f"{address}: missing fixed_node_count / autoscaling; node count assumed 0"]
+    return (
+        0,
+        0,
+        [f"{address}: missing fixed_node_count / autoscaling; node count assumed 0"],
+        True,
+    )
 
 
 def estimate_node_group(
@@ -998,7 +1023,9 @@ def estimate_node_group(
         resources = {}
     platform = str(resources.get("platform") or "")
     preset = str(resources.get("preset") or "")
-    count_min, count_max, warnings = _node_group_count_range(values, usage, snap.address, snap.name)
+    count_min, count_max, warnings, count_missing = _node_group_count_range(
+        values, usage, snap.address, snap.name
+    )
 
     if not platform:
         return _line(
@@ -1007,6 +1034,7 @@ def estimate_node_group(
             amount=0.0,
             details="node group missing template.resources.platform",
             unknown=True,
+            missing_usage=count_missing,
             warnings=[f"{snap.address}: missing template.resources.platform"],
         )
 
@@ -1026,6 +1054,7 @@ def estimate_node_group(
             amount=0.0,
             details=parts.details,
             unknown=True,
+            missing_usage=count_missing,
             warnings=warnings,
         )
 
@@ -1051,7 +1080,7 @@ def estimate_node_group(
         if disk_item.unknown:
             warnings.append(f"{snap.address}: boot disk price unknown")
 
-    local_amount, local_warnings = _local_ssd_amount(
+    local_amount, local_warnings, local_missing = _local_ssd_amount(
         snap.address, template, catalog, cfg, usage, resource_name=snap.name
     )
     warnings.extend(local_warnings)
@@ -1071,6 +1100,7 @@ def estimate_node_group(
         cfg,
         amount=amount_max,
         details=details,
+        missing_usage=count_missing or local_missing,
         warnings=warnings,
         amount_min=amount_min,
         amount_max=amount_max,
@@ -1357,10 +1387,13 @@ def run_estimate(
 
     warnings: list[str] = []
     unknown: list[str] = []
+    missing_usage: list[str] = []
     for item in before_items + after_items:
         warnings.extend(item.warnings)
         if item.unknown:
             unknown.append(item.address)
+        if item.missing_usage:
+            missing_usage.append(item.address)
 
     return EstimateResult(
         period=cfg.period,
@@ -1374,6 +1407,7 @@ def run_estimate(
         before_items=before_items,
         after_items=after_items,
         unknown_resources=_uniq(unknown),
+        missing_usage_resources=_uniq(missing_usage),
         warnings=_uniq(warnings),
         catalog_path=str(catalog.path),
         document_kind=doc.kind,

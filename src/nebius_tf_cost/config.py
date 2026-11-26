@@ -10,11 +10,9 @@ from nebius_tf_cost.errors import UsageError
 from nebius_tf_cost.periods import VALID_PERIODS, Period
 
 Currency = Literal["USD", "ILS"]
-OnExceed = Literal["warn", "fail"]
 Mode = Literal["auto", "plan", "state", "total"]
 
 VALID_CURRENCIES: frozenset[str] = frozenset({"USD", "ILS"})
-VALID_ON_EXCEED: frozenset[str] = frozenset({"warn", "fail"})
 VALID_MODES: frozenset[str] = frozenset({"auto", "plan", "state", "total"})
 
 
@@ -26,7 +24,7 @@ class EstimateConfig:
     period: Period = "month"
     currency: Currency = "USD"
     budget: float | None = None
-    on_exceed: OnExceed = "warn"
+    strict_check: bool = False
     usage_path: Path | None = None
     catalog_path: Path | None = None
     mode: Mode = "auto"
@@ -41,7 +39,6 @@ class EstimateConfig:
 
         _one_of("period", self.period, VALID_PERIODS)
         _one_of("currency", self.currency, VALID_CURRENCIES)
-        _one_of("on-exceed", self.on_exceed, VALID_ON_EXCEED)
         _one_of("mode", self.mode, VALID_MODES)
         if self.budget is not None and self.budget < 0:
             raise UsageError("budget must be >= 0")

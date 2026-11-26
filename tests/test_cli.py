@@ -40,7 +40,7 @@ def test_cli_estimate_ok(fixtures_dir: Path, capsys) -> None:
     assert "Delta:" in out
 
 
-def test_cli_budget_fail(fixtures_dir: Path) -> None:
+def test_cli_budget_exceed_strict_fails(fixtures_dir: Path) -> None:
     code = main(
         [
             "estimate",
@@ -50,8 +50,7 @@ def test_cli_budget_fail(fixtures_dir: Path) -> None:
             CATALOG,
             "--budget",
             "1",
-            "--on-exceed",
-            "fail",
+            "--strict-check",
             "--usage-file",
             str(fixtures_dir / "usage.yaml"),
         ]
@@ -59,7 +58,7 @@ def test_cli_budget_fail(fixtures_dir: Path) -> None:
     assert code == int(ExitCode.BUDGET_EXCEEDED)
 
 
-def test_cli_budget_warn(fixtures_dir: Path) -> None:
+def test_cli_budget_exceed_default_warns(fixtures_dir: Path, capsys) -> None:
     code = main(
         [
             "estimate",
@@ -69,13 +68,14 @@ def test_cli_budget_warn(fixtures_dir: Path) -> None:
             CATALOG,
             "--budget",
             "1",
-            "--on-exceed",
-            "warn",
             "--usage-file",
             str(fixtures_dir / "usage.yaml"),
         ]
     )
     assert code == int(ExitCode.OK)
+    err = capsys.readouterr().err
+    assert "warning:" in err
+    assert "budget exceeded" in err
 
 
 def test_cli_json(fixtures_dir: Path, capsys) -> None:
@@ -99,6 +99,7 @@ def test_cli_json(fixtures_dir: Path, capsys) -> None:
     assert "after_total_min" in payload
     assert "delta_min" in payload
     assert "delta_max" in payload
+    assert "missing_usage_resources" in payload
 
 
 def test_cli_budget_gates_on_max(fixtures_dir: Path, capsys) -> None:
@@ -134,8 +135,7 @@ def test_cli_budget_gates_on_max(fixtures_dir: Path, capsys) -> None:
             "hour",
             "--budget",
             str(mid),
-            "--on-exceed",
-            "fail",
+            "--strict-check",
         ]
     )
     assert code_fail == int(ExitCode.BUDGET_EXCEEDED)
@@ -151,11 +151,117 @@ def test_cli_budget_gates_on_max(fixtures_dir: Path, capsys) -> None:
             "hour",
             "--budget",
             str(amax + 1),
-            "--on-exceed",
-            "fail",
+            "--strict-check",
         ]
     )
     assert code_ok == int(ExitCode.OK)
+
+
+def test_cli_strict_check_missing_usage(fixtures_dir: Path, capsys) -> None:
+    """Without usage for Object Storage, --strict-check fails; default warns."""
+    code_warn = main(
+        [
+            "estimate",
+            "--plan",
+            str(fixtures_dir / "plan_create.json"),
+            "--catalog",
+            CATALOG,
+            "--period",
+            "month",
+        ]
+    )
+    assert code_warn == int(ExitCode.OK)
+    err = capsys.readouterr().err
+    assert "warning:" in err
+    assert "planned usage" in err.lower() or "missing" in err.lower()
+
+    code_fail = main(
+        [
+            "estimate",
+            "--plan",
+            str(fixtures_dir / "plan_create.json"),
+            "--catalog",
+            CATALOG,
+            "--period",
+            "month",
+            "--strict-check",
+        ]
+    )
+    assert code_fail == int(ExitCode.STRICT_CHECK_FAILED)
+    err = capsys.readouterr().err
+    assert "error:" in err
+
+
+def test_cli_strict_check_unknown_resources(fixtures_dir: Path, capsys) -> None:
+    """Unpriced / unknown resources fail under --strict-check; warn otherwise."""
+    code_warn = main(
+        [
+            "estimate",
+            "--plan",
+            str(fixtures_dir / "plan_coverage.json"),
+            "--catalog",
+            CATALOG,
+            "--period",
+            "hour",
+        ]
+    )
+    assert code_warn == int(ExitCode.OK)
+    captured = capsys.readouterr()
+    assert "Unknown" in captured.out or "warning:" in captured.err
+
+    code_fail = main(
+        [
+            "estimate",
+            "--plan",
+            str(fixtures_dir / "plan_coverage.json"),
+            "--catalog",
+            CATALOG,
+            "--period",
+            "hour",
+            "--strict-check",
+        ]
+    )
+    assert code_fail == int(ExitCode.STRICT_CHECK_FAILED)
+    err = capsys.readouterr().err
+    assert "error:" in err
+    assert "unknown" in err.lower()
+
+
+def test_cli_strict_check_ok_with_usage(fixtures_dir: Path) -> None:
+    code = main(
+        [
+            "estimate",
+            "--plan",
+            str(fixtures_dir / "plan_create.json"),
+            "--catalog",
+            CATALOG,
+            "--usage-file",
+            str(fixtures_dir / "usage.yaml"),
+            "--budget",
+            "5000",
+            "--strict-check",
+        ]
+    )
+    assert code == int(ExitCode.OK)
+
+
+def test_cli_on_exceed_removed(fixtures_dir: Path) -> None:
+    try:
+        code = main(
+            [
+                "estimate",
+                "--plan",
+                str(fixtures_dir / "plan_create.json"),
+                "--catalog",
+                CATALOG,
+                "--on-exceed",
+                "fail",
+            ]
+        )
+    except SystemExit as exc:
+        assert exc.code not in (0, None)
+        return
+    assert code != int(ExitCode.OK)
 
 
 def test_cli_missing_file() -> None:

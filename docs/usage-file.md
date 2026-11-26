@@ -53,6 +53,7 @@ Request and egress counts are for the **same window** as `--period` (they are no
 - Local SSD with `local_disks` but no `local_ssd_gib`: warned / unpriced for that component.
 - MK8s without `node_count`: uses Terraform `fixed_node_count` / autoscaling min–max for min/max estimates.
 - Serverless without `running_fraction`: assumes fully running (`1`).
+- With `--strict-check`, missing planned usage for resources that cannot be estimated without it (Object Storage metrics, local SSD size, node count assumed 0) causes a non-zero exit.
 
 ## CLI-only defaults
 

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TextIO
 
 from nebius_tf_cost import __version__
-from nebius_tf_cost.budget import evaluate_budget
+from nebius_tf_cost.budget import evaluate_budget, strict_check_reasons
 from nebius_tf_cost.catalog import load_catalog
 from nebius_tf_cost.config import EstimateConfig, PlannedUsage
 from nebius_tf_cost.errors import EstimateError, ExitCode
@@ -31,13 +31,13 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="""
 examples:
   nebius-tf-cost estimate --plan plan.json --period month
-  nebius-tf-cost estimate --plan plan.json --budget 500 --on-exceed fail
+  nebius-tf-cost estimate --plan plan.json --budget 500 --strict-check
   nebius-tf-cost estimate --state state.json --usage-file usage.yaml --period hour
   nebius-tf-cost estimate --plan plan.json --usage-metric stored_gib=100 --currency USD
 
 exit codes:
-  0  success (and max within budget, or warn-only exceed)
-  2  max estimate exceeds budget with --on-exceed fail
+  0  success (warnings only unless --strict-check)
+  2  --strict-check failed (budget exceeded, missing planned usage, or unknown resources)
   64 usage / flag error
   65 bad plan/state/catalog/usage data
   70 internal error
@@ -67,10 +67,13 @@ exit codes:
     )
     est.add_argument("--budget", type=float, default=None, help="Budget amount in --currency")
     est.add_argument(
-        "--on-exceed",
-        choices=["warn", "fail"],
-        default="warn",
-        help=("When the max (pessimistic) estimate exceeds budget: warn (exit 0) or fail (exit 2)"),
+        "--strict-check",
+        action="store_true",
+        help=(
+            "Fail (exit 2) when max cost exceeds --budget, when resources need planned "
+            "usage that was not provided, or when unknown/unpriced Nebius resources are "
+            "present. Default: warn and exit 0"
+        ),
     )
     est.add_argument(
         "--budget-compare",
@@ -194,6 +197,11 @@ def format_text(result: EstimateResult, include_zero: bool = False) -> str:
         lines.append("Unknown / unpriced resources:")
         for u in result.unknown_resources:
             lines.append(f"  - {u}")
+    if result.missing_usage_resources:
+        lines.append("")
+        lines.append("Resources needing planned usage:")
+        for u in result.missing_usage_resources:
+            lines.append(f"  - {u}")
     return "\n".join(lines) + "\n"
 
 
@@ -213,6 +221,7 @@ def result_to_dict(result: EstimateResult) -> dict:
         "catalog_path": result.catalog_path,
         "document_kind": result.document_kind,
         "unknown_resources": result.unknown_resources,
+        "missing_usage_resources": result.missing_usage_resources,
         "warnings": result.warnings,
         "before_items": [asdict(i) for i in result.before_items],
         "after_items": [asdict(i) for i in result.after_items],
@@ -233,7 +242,7 @@ def cmd_estimate(args: argparse.Namespace, out: TextIO, err: TextIO) -> int:
         period=args.period,
         currency=args.currency,
         budget=args.budget,
-        on_exceed=args.on_exceed,
+        strict_check=args.strict_check,
         usage_path=args.usage_file,
         catalog_path=args.catalog,
         mode=args.mode,
@@ -251,11 +260,16 @@ def cmd_estimate(args: argparse.Namespace, out: TextIO, err: TextIO) -> int:
     cfg = replace(cfg, mode=_resolve_mode(cfg.mode, doc.kind))  # type: ignore[arg-type]
 
     result = run_estimate(doc, catalog, cfg, usage)
-    verdict = evaluate_budget(result, cfg.budget, cfg.on_exceed, compare_mode=args.budget_compare)
+    verdict = evaluate_budget(
+        result, cfg.budget, strict=cfg.strict_check, compare_mode=args.budget_compare
+    )
+    reasons = strict_check_reasons(result, verdict)
 
     if cfg.json_output:
         payload = result_to_dict(result)
         payload["budget"] = None if verdict is None else asdict(verdict)
+        payload["strict_check"] = cfg.strict_check
+        payload["strict_check_reasons"] = reasons
         # exit_code is IntEnum — make JSON-friendly
         if payload["budget"] is not None:
             payload["budget"]["exit_code"] = int(verdict.exit_code) if verdict else 0
@@ -266,11 +280,17 @@ def cmd_estimate(args: argparse.Namespace, out: TextIO, err: TextIO) -> int:
         if verdict is not None:
             out.write("\n" + verdict.message + "\n")
 
-    if verdict is not None and verdict.exceeded and cfg.on_exceed == "warn" and not cfg.json_output:
-        err.write(f"warning: {verdict.message}\n")
+    if cfg.strict_check and reasons:
+        for reason in reasons:
+            err.write(f"error: {reason}\n")
+        if verdict is not None and verdict.exceeded:
+            return int(ExitCode.BUDGET_EXCEEDED)
+        return int(ExitCode.STRICT_CHECK_FAILED)
 
-    if verdict is not None:
-        return int(verdict.exit_code)
+    if not cfg.strict_check and reasons and not cfg.json_output:
+        for reason in reasons:
+            err.write(f"warning: {reason}\n")
+
     return int(ExitCode.OK)
 
 

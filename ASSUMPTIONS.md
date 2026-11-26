@@ -3,7 +3,7 @@
 ## Min / max cost semantics
 
 Estimates report an **optimistic min** and **pessimistic max** for totals and plan deltas.
-Budget `--on-exceed warn|fail` always gates on the **max** figure.
+Budget gating (and `--strict-check`) always compares against the **max** figure.
 
 | Bound | Meaning |
 |-------|---------|
@@ -12,8 +12,8 @@ Budget `--on-exceed warn|fail` always gates on the **max** figure.
 
 - When min and max coincide (fixed sizes, non-spot, fixed preemptible, or `--preemptible-policy floor`), both equal the point estimate.
 - **Delta range** uses interval arithmetic: `delta_min = after_min − before_max`, `delta_max = after_max − before_min`.
-- Missing planned usage (Object Storage, local SSD size) stays **0 for both** bounds — there is no configured upper bound unless you pass `--usage-file` / `--usage-metric`. Documented zero-with-warning policy is unchanged.
-- Unknown / unpriced resources contribute **0** to both bounds (and appear under unknown resources).
+- Missing planned usage (Object Storage, local SSD size) stays **0 for both** bounds — there is no configured upper bound unless you pass `--usage-file` / `--usage-metric`. Default is zero-with-warning; `--strict-check` fails instead.
+- Unknown / unpriced resources contribute **0** to both bounds (and appear under unknown resources). `--strict-check` fails when any are present.
 - `--preemptible-policy` for spot/preemptible GPU resources:
   - `on_demand` (default): min = published floor / fixed preemptible; max = on-demand for **dynamic** floors (budget uses max). Fixed preemptible platforms keep min = max at the list preemptible rates.
   - `floor`: min = max = published floor (or fixed preemptible rates).

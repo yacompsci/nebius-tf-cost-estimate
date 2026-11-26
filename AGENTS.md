@@ -38,7 +38,7 @@ Default pytest config uses `-m "not e2e"`. E2E is opt-in via `make e2e` or `pyth
 
 - Rates come from **published Nebius documentation** (and documented spot floors / fixed preemptible tables). See `ASSUMPTIONS.md` and catalog `meta.sources`.
 - **Never invent prices** for platforms or SKUs absent from those tables. Leave resources unknown / unpriced / free as documented; record gaps in `ASSUMPTIONS.md` / catalog `unpriced_gaps`.
-- Month = **730h**, year = **8760h**. Budget gates use the **max** (pessimistic) bound.
+- Month = **730h**, year = **8760h**. Budget / `--strict-check` gates use the **max** (pessimistic) bound.
 - After catalog edits, sync **both** JSON paths and re-run tests. Prefer `python scripts/refresh_catalog.py` when refreshing from docs.
 - Spot: do not vendor live SpotPriceService quotes as floors; use published floors / fixed preemptible rows. `--spot-snapshot` is for comparison only.
 

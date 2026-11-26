@@ -6,7 +6,7 @@
 
 Estimate **Nebius AI Cloud** costs from Terraform **plan** or **state** JSON — no Nebius account credentials required.
 
-Uses a vendored public price catalog (`data/prices.json`) derived from [Nebius docs](https://docs.nebius.com/llms.txt). Supports **min/max** total estimates and plan deltas, budget warn/fail gates on the **max** (pessimistic) figure, hour/month/year periods, and planned usage for usage-based resources (Object Storage, MK8s node counts, Serverless AI duty cycle, local SSD size).
+Uses a vendored public price catalog (`data/prices.json`) derived from [Nebius docs](https://docs.nebius.com/llms.txt). Supports **min/max** total estimates and plan deltas, optional `--strict-check` gating on the **max** (pessimistic) figure / missing usage / unknown types, hour/month/year periods, and planned usage for usage-based resources (Object Storage, MK8s node counts, Serverless AI duty cycle, local SSD size).
 
 ## Install
 
@@ -27,11 +27,10 @@ nebius-tf-cost estimate \
   --plan examples/sample-plan.json \
   --usage-file examples/usage.yaml \
   --period month \
-  --budget 5000 \
-  --on-exceed warn
+  --budget 5000
 ```
 
-Expected: prints before/after/delta **min and max** totals, line items, warnings for unpriced or zero-usage resources, and a budget verdict gated on **max**.
+Expected: prints before/after/delta **min and max** totals, line items, warnings for unpriced or zero-usage resources, and a budget verdict gated on **max**. Add `--strict-check` in CI to fail on budget exceed, missing planned usage, or unknown/unpriced resources.
 
 ## CI-friendly test command
 
@@ -72,7 +71,7 @@ make e2e
 | `--period hour\|month\|year` | Totals period (`month` = 730h per Nebius docs) |
 | `--currency USD\|ILS` | Catalog currency |
 | `--budget AMOUNT` | Budget in `--currency` for the selected period |
-| `--on-exceed warn\|fail` | Gate on **max** estimate: `warn` → exit 0; `fail` → exit 2 |
+| `--strict-check` | Fail (exit 2) if max exceeds `--budget`, planned usage is missing, or unknown/unpriced resources are present; default is warn + exit 0 |
 | `--budget-compare after\|delta\|abs_delta` | Which **max** figure to gate (`after_total_max`, `delta_max`, or worst `abs` delta) |
 | `--usage-file PATH` | YAML/JSON planned usage |
 | `--usage-metric KEY=VALUE` | Default usage overrides (repeatable) |
@@ -95,8 +94,8 @@ See **[docs/usage-file.md](docs/usage-file.md)** for the file shape, metric tabl
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success (budget OK, or exceed with `warn`) |
-| 2 | Budget exceeded with `--on-exceed fail` |
+| 0 | Success (warnings only unless `--strict-check`) |
+| 2 | `--strict-check` failed (budget exceeded, missing planned usage, or unknown resources) |
 | 64 | Bad flags / missing input paths |
 | 65 | Invalid plan/state/catalog/usage data |
 | 70 | Unexpected internal error |

@@ -1,5 +1,9 @@
 # nebius-tf-cost
 
+[![CI](https://github.com/alon-sage/nebius-tf-cost-estimate/actions/workflows/ci.yml/badge.svg)](https://github.com/alon-sage/nebius-tf-cost-estimate/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+
 Estimate **Nebius AI Cloud** costs from Terraform **plan** or **state** JSON — no Nebius account credentials required.
 
 Uses a vendored public price catalog (`data/prices.json`) derived from [Nebius docs](https://docs.nebius.com/llms.txt). Supports **min/max** total estimates and plan deltas, budget warn/fail gates on the **max** (pessimistic) figure, hour/month/year periods, and planned usage for usage-based resources (Object Storage, MK8s node counts, Serverless AI duty cycle, local SSD size).
@@ -41,8 +45,9 @@ ruff format --check src tests scripts
 Or via Make:
 
 ```bash
-make check          # pytest + ruff
+make check          # pytest (excludes e2e) + ruff
 make cov            # pytest with coverage (pytest-cov in [dev])
+make e2e            # plan-only Terraform e2e (@pytest.mark.e2e)
 ```
 
 Or as a single gate:
@@ -55,7 +60,8 @@ Default `pytest` excludes `@pytest.mark.e2e` (offline/fast). Plan-only Terraform
 
 ```bash
 # requires terraform on PATH; skips locally if missing
-python -m pytest -m e2e -o addopts=-q
+make e2e
+# or: python -m pytest -m e2e -o addopts=-q
 ```
 
 ## Flags (summary)
@@ -141,3 +147,14 @@ python scripts/discover_uncovered_types.py --dry-run --repo owner/nebius-tf-cost
 - Fixed preemptible platforms (L40S) use published preemptible list rates for both bounds
 
 See [ASSUMPTIONS.md](ASSUMPTIONS.md) for full semantics.
+
+## Contributing
+
+Contributions are welcome. See:
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — setup, lint/test, PR norms, e2e
+- [AGENTS.md](AGENTS.md) — layout and rules for coding agents
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- [SECURITY.md](SECURITY.md) — vulnerability reporting (no cloud secrets required to use or test this tool)
+
+Licensed under the [Apache License 2.0](LICENSE) (matches `pyproject.toml`).

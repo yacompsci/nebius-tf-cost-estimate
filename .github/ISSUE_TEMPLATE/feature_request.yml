@@ -1,0 +1,27 @@
+name: Feature / coverage request
+description: Request a new estimator, flag, or provider type coverage
+title: "feature: "
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Coverage requests should **not** invent prices. Link published Nebius docs when proposing rates.
+        Uncovered provider types may also be filed automatically by the discover-uncovered-types workflow.
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should the tool do?
+    validations:
+      required: true
+  - type: textarea
+    id: resources
+    attributes:
+      label: Resource types / docs
+      description: Terraform type names (e.g. nebius_…) and links to public pricing docs.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance ideas
+      description: Suggested tests, usage metrics, ASSUMPTIONS notes.

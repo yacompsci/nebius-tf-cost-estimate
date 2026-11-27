@@ -20,11 +20,9 @@ pip install -e ".[dev]"
 
 ## Demo
 
-```bash
-# From a terraform plan JSON:
-terraform plan -out=tfplan
-terraform show -json tfplan > plan.json
+Uses the committed sample plan and usage file (no Terraform required):
 
+```bash
 nebius-tf-cost estimate \
   --plan examples/sample-plan.json \
   --usage-file examples/usage.yaml \
@@ -33,6 +31,16 @@ nebius-tf-cost estimate \
 ```
 
 Expected: prints before/after/delta **min and max** totals, line items, warnings for unpriced or zero-usage resources, and a budget verdict gated on **max**. Add `--strict-check` in CI to fail on budget exceed, missing planned usage, or unknown/unpriced resources.
+
+More copy-paste pairs: [examples/usage/README.md](examples/usage/README.md).
+
+To estimate **your** stack, export plan JSON and pass that same path:
+
+```bash
+terraform plan -out=tfplan
+terraform show -json tfplan > plan.json
+nebius-tf-cost estimate --plan plan.json --usage-file examples/usage.yaml --period month
+```
 
 ## CI-friendly test command
 

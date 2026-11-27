@@ -2,7 +2,9 @@
 
 ## Supported versions
 
-Security fixes are accepted against the default branch (`main`) for the current `0.x` line published in this repository.
+Security fixes are accepted against the default branch (`main`) for the current
+**1.x** SemVer line (see [CHANGELOG.md](CHANGELOG.md) and
+`src/nebius_tf_cost/__version__`).
 
 ## Reporting a vulnerability
 

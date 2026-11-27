@@ -1,0 +1,66 @@
+name: Release
+
+# Creates a GitHub Release when a SemVer tag (vX.Y.Z) is pushed.
+# Does not publish to PyPI — that remains a follow-up.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  github-release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Verify tag matches __version__
+        env:
+          PYTHONPATH: src
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          EXPECTED="${TAG#v}"
+          ACTUAL="$(python -c 'from nebius_tf_cost import __version__; print(__version__)')"
+          echo "tag=$TAG expected=$EXPECTED actual=$ACTUAL"
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Extract CHANGELOG section
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+          import sys
+
+          tag = os.environ["VERSION"]
+          version = tag[1:] if tag.startswith("v") else tag
+          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          pattern = rf"^## \[{re.escape(version)}\].*?(?=^## |\Z)"
+          match = re.search(pattern, text, flags=re.M | re.S)
+          if not match:
+              print(f"No CHANGELOG section for [{version}]", file=sys.stderr)
+              sys.exit(1)
+          body = match.group(0).strip() + "\n"
+          pathlib.Path("release-notes.md").write_text(body, encoding="utf-8")
+          print(body[:500])
+          PY
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file release-notes.md \
+            --verify-tag

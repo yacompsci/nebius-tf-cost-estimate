@@ -7,6 +7,7 @@ import pytest
 from nebius_tf_cost.config import EstimateConfig, PlannedUsage
 from nebius_tf_cost.estimate import (
     LineItem,
+    _inline_managed_boot_disk_spec,
     _is_preemptible,
     _size_gib,
     _sum_items_max,
@@ -14,6 +15,7 @@ from nebius_tf_cost.estimate import (
     estimate_ai_endpoint,
     estimate_filesystem,
     estimate_free,
+    estimate_instance,
     estimate_resource,
     estimate_snapshot,
     estimate_unknown,
@@ -28,6 +30,40 @@ def test_size_gib_unit_variants() -> None:
     assert _size_gib({"size_kibibytes": 1024 * 1024}) == pytest.approx(1.0)
     assert _size_gib({"size_bytes": 1024**3}) == pytest.approx(1.0)
     assert _size_gib({}) is None
+
+
+def test_inline_managed_boot_disk_spec() -> None:
+    sized = {
+        "attach_mode": "READ_WRITE",
+        "managed_disk": {
+            "name": "boot",
+            "spec": {"type": "NETWORK_SSD", "size_gibibytes": 64},
+        },
+    }
+    assert _inline_managed_boot_disk_spec(sized) == {
+        "type": "NETWORK_SSD",
+        "size_gibibytes": 64,
+    }
+    # existing_disk id-only → ignore
+    assert (
+        _inline_managed_boot_disk_spec(
+            {"attach_mode": "READ_WRITE", "existing_disk": {"id": "computdisk-1"}}
+        )
+        is None
+    )
+    # empty / null managed_disk (common alongside existing_disk in state) → ignore
+    assert _inline_managed_boot_disk_spec({"managed_disk": None}) is None
+    assert _inline_managed_boot_disk_spec({"managed_disk": {}}) is None
+    # name-only managed stub without spec/size → ignore
+    assert _inline_managed_boot_disk_spec({"managed_disk": {"name": "boot"}}) is None
+    assert (
+        _inline_managed_boot_disk_spec(
+            {"managed_disk": {"name": "boot", "spec": {"type": "NETWORK_SSD"}}}
+        )
+        is None
+    )
+    assert _inline_managed_boot_disk_spec(None) is None
+    assert _inline_managed_boot_disk_spec({}) is None
 
 
 def test_is_preemptible_variants() -> None:
@@ -235,6 +271,107 @@ def test_local_ssd_usage_priced(catalog, fixtures_dir: Path) -> None:
     item = estimate_resource(snap, catalog, cfg, usage)
     assert "local_ssd" in item.details
     assert item.amount > 43.8  # compute alone
+
+
+def test_existing_boot_disk_ignored_on_instance(catalog, fixtures_dir: Path) -> None:
+    """existing_disk / size-less refs: compute only, no missing-size warnings."""
+    cfg = EstimateConfig(input_path=fixtures_dir / "plan_create.json", period="month")
+    compute_only = 43.8  # cpu-e2 2vcpu-8gb monthly
+    for boot in (
+        {"attach_mode": "READ_WRITE", "existing_disk": {"id": "computdisk-1"}},
+        {
+            "attach_mode": "READ_WRITE",
+            "existing_disk": {"id": "computdisk-1"},
+            "managed_disk": None,
+        },
+        {"attach_mode": "READ_WRITE", "managed_disk": {"name": "boot-only"}},
+        {
+            "attach_mode": "READ_WRITE",
+            "managed_disk": {"name": "boot", "spec": {"type": "NETWORK_SSD"}},
+        },
+    ):
+        snap = ResourceSnapshot(
+            address="nebius_compute_v1_instance.ref",
+            type="nebius_compute_v1_instance",
+            name="ref",
+            provider_name="registry.terraform.io/nebius/nebius",
+            side="after",
+            values={
+                "resources": {"platform": "cpu-e2", "preset": "2vcpu-8gb"},
+                "boot_disk": boot,
+            },
+        )
+        item = estimate_instance(snap, catalog, cfg, PlannedUsage())
+        assert item.amount == pytest.approx(compute_only, rel=1e-6)
+        assert "boot_disk=" not in item.details
+        assert not any("missing size" in w for w in item.warnings)
+        assert not any("boot disk price unknown" in w for w in item.warnings)
+        assert item.unknown is False
+
+
+def test_inline_boot_disk_still_priced_on_instance(catalog, fixtures_dir: Path) -> None:
+    snap = ResourceSnapshot(
+        address="nebius_compute_v1_instance.inline",
+        type="nebius_compute_v1_instance",
+        name="inline",
+        provider_name="registry.terraform.io/nebius/nebius",
+        side="after",
+        values={
+            "resources": {"platform": "cpu-e2", "preset": "2vcpu-8gb"},
+            "boot_disk": {
+                "managed_disk": {
+                    "name": "inline-boot",
+                    "spec": {"type": "NETWORK_SSD", "size_gibibytes": 100},
+                }
+            },
+        },
+    )
+    cfg = EstimateConfig(input_path=fixtures_dir / "plan_create.json", period="month")
+    item = estimate_instance(snap, catalog, cfg, PlannedUsage())
+    assert item.amount == pytest.approx(43.8 + 7.1, rel=1e-6)
+    assert "boot_disk=7.100000" in item.details
+
+
+def test_attached_boot_disks_no_double_count(catalog, fixtures_dir: Path) -> None:
+    """Separate disk resources + existing_disk refs: disks once, no instance warnings."""
+    doc = detect_and_load(fixtures_dir / "state_attached_boot.json")
+    cfg = EstimateConfig(
+        input_path=fixtures_dir / "state_attached_boot.json",
+        period="month",
+        mode="total",
+    )
+    result = run_estimate(doc, catalog, cfg, PlannedUsage())
+
+    by_addr = {i.address: i for i in result.after_items}
+    disk_cost = 7.1  # 100 GiB * 0.071
+    compute = 43.8
+
+    assert by_addr["nebius_compute_v1_disk.gw_boot[0]"].amount == pytest.approx(disk_cost, rel=1e-6)
+    assert by_addr["nebius_compute_v1_disk.gw_boot[1]"].amount == pytest.approx(disk_cost, rel=1e-6)
+    assert by_addr["nebius_compute_v1_disk.sms_boot"].amount == pytest.approx(disk_cost, rel=1e-6)
+
+    bastion = by_addr["nebius_compute_v1_instance.bastion"]
+    assert bastion.amount == pytest.approx(compute + disk_cost, rel=1e-6)
+    assert "boot_disk=" in bastion.details
+
+    for addr in (
+        "nebius_compute_v1_instance.gw[0]",
+        "nebius_compute_v1_instance.gw[1]",
+        "nebius_compute_v1_instance.sms",
+        "nebius_compute_v1_instance.external_boot",
+    ):
+        item = by_addr[addr]
+        assert item.amount == pytest.approx(compute, rel=1e-6)
+        assert "boot_disk=" not in item.details
+        assert not any("missing size" in w for w in item.warnings)
+        assert not any("boot disk price unknown" in w for w in item.warnings)
+
+    assert not any("missing size" in w for w in result.warnings)
+    assert not any("boot disk price unknown" in w for w in result.warnings)
+    # 3 separate disks + bastion inline boot + 4 compute-only instances
+    assert result.after_total == pytest.approx(
+        3 * disk_cost + (compute + disk_cost) + 4 * compute, rel=1e-6
+    )
 
 
 def test_ai_endpoint_cpu_selector_without_preset_unknown(catalog, fixtures_dir: Path) -> None:

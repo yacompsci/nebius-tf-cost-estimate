@@ -10,6 +10,14 @@ and as the installed package version via setuptools dynamic metadata).
 
 ## [Unreleased]
 
+### Fixed
+
+- Instance boot disks attached by `existing_disk` (id-only) or without inline
+  `managed_disk.spec` size are ignored on the instance line — no “missing size_*”
+  / “boot disk price unknown” warnings and no double-count when the disk is already
+  a `nebius_compute_v1_disk` resource. Inline sized managed boot disks still fold
+  into the instance estimate.
+
 ### Changed
 
 - Canonical repository is now

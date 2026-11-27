@@ -171,6 +171,32 @@ def _size_gib(values: dict[str, Any]) -> float | None:
     return None
 
 
+def _inline_managed_boot_disk_spec(boot: Any) -> dict[str, Any] | None:
+    """Return ``boot_disk.managed_disk.spec`` only when it is self-contained.
+
+    Instances often attach a separately managed disk via ``existing_disk.id``
+    (or a managed_disk stub without size). Those disks must be priced only when
+    they appear as ``nebius_compute_v1_disk`` (or equivalent) resources — not
+    folded into the instance with a missing-size warning.
+    """
+    if not isinstance(boot, dict) or not boot:
+        return None
+    # ID/name-only attachment: never fold into the instance line.
+    existing = boot.get("existing_disk")
+    if isinstance(existing, dict) and existing:
+        return None
+    managed = boot.get("managed_disk")
+    if not isinstance(managed, dict) or not managed:
+        return None
+    spec = managed.get("spec")
+    if not isinstance(spec, dict) or not spec:
+        return None
+    # Size-less managed spec → ignore (priced via disk resource or unknown).
+    if _size_gib(spec) is None:
+        return None
+    return spec
+
+
 def _is_preemptible(values: dict[str, Any]) -> bool:
     preempt = values.get("preemptible")
     if preempt is True:
@@ -552,24 +578,20 @@ def estimate_instance(
     compute_max = scale_hourly(parts.hourly_max, cfg.period, month_hours=catalog.month_hours)
 
     disk_amount = 0.0
-    boot = values.get("boot_disk") or {}
-    if isinstance(boot, dict):
-        managed = boot.get("managed_disk") or {}
-        if isinstance(managed, dict):
-            spec = managed.get("spec") or managed
-            if isinstance(spec, dict):
-                disk_item = _estimate_disk_values(
-                    snap.address + ".boot_disk",
-                    snap.type,
-                    snap.side,
-                    spec,
-                    catalog,
-                    cfg,
-                )
-                disk_amount = disk_item.amount_max
-                warnings.extend(disk_item.warnings)
-                if disk_item.unknown:
-                    warnings.append(f"{snap.address}: boot disk price unknown")
+    boot_spec = _inline_managed_boot_disk_spec(values.get("boot_disk"))
+    if boot_spec is not None:
+        disk_item = _estimate_disk_values(
+            snap.address + ".boot_disk",
+            snap.type,
+            snap.side,
+            boot_spec,
+            catalog,
+            cfg,
+        )
+        disk_amount = disk_item.amount_max
+        warnings.extend(disk_item.warnings)
+        if disk_item.unknown:
+            warnings.append(f"{snap.address}: boot disk price unknown")
 
     local_amount, local_warnings, local_missing = _local_ssd_amount(
         snap.address, values, catalog, cfg, usage, resource_name=snap.name

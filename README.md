@@ -89,7 +89,18 @@ nebius-tf-cost estimate --help
 
 Object Storage, MK8s node counts, Serverless AI duty cycle, and local SSD size are not fully encoded in Terraform. Pass planned metrics with `--usage-file` / `--usage-metric`.
 
-See **[docs/usage-file.md](docs/usage-file.md)** for the file shape, metric table, lookup order, and [examples/usage.yaml](examples/usage.yaml).
+See **[docs/usage-file.md](docs/usage-file.md)** for the file shape, metric table, and lookup order.
+
+Copy-paste patterns (clear missing-usage warnings without tribal knowledge):
+
+| Example | Covers |
+|---------|--------|
+| [examples/usage.yaml](examples/usage.yaml) | Short Object Storage demo for `examples/sample-plan.json` |
+| [examples/usage/gpu-nodes.yaml](examples/usage/gpu-nodes.yaml) | GPU node counts / Serverless utilization / local SSD |
+| [examples/usage/object-storage-egress.yaml](examples/usage/object-storage-egress.yaml) | Storage + requests + egress |
+| [examples/usage/preemptible-mix.yaml](examples/usage/preemptible-mix.yaml) | On-demand + spot fleet overlays + `--preemptible-policy` |
+
+Index: [examples/usage/README.md](examples/usage/README.md).
 
 ## Quote-only / missing catalog rates
 

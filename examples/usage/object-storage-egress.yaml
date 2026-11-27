@@ -1,0 +1,35 @@
+# Pattern: Object Storage — storage, API requests, and egress
+#
+# When to use:
+#   Any plan with nebius_storage_v1_bucket.* where you care about storage,
+#   Class A/B requests, or internet / cross-region egress. Without planned
+#   usage those line items are $0 and the CLI warns (or --strict-check fails).
+#
+# Counts (requests, egress_gib) are for the SAME window as --period
+# (month → monthly GiB / request totals; they are not auto-scaled).
+#
+# Pair with: examples/sample-plan.json (bucket datasets)
+# Also works with: tests/e2e/terraform/usage.yaml addresses / e2e stack
+#
+#   nebius-tf-cost estimate \
+#     --plan examples/sample-plan.json \
+#     --usage-file examples/usage/object-storage-egress.yaml \
+#     --period month
+
+defaults:
+  # Applied only when a bucket has no per-resource override for that metric.
+  stored_gib: 0
+
+resources:
+  nebius_storage_v1_bucket.datasets:
+    stored_gib: 2048 # average GiB stored over the estimate window
+    class_a_requests: 50000 # PUT/POST/DELETE count in the window
+    class_b_requests: 500000 # GET/HEAD count in the window
+    egress_gib: 750 # GiB egress to internet / other region in the window
+    # intelligent_tier: 1   # uncomment if bucket uses INTELLIGENT cold tier (≥1)
+
+# Optional name-only match when addresses differ across modules but the
+# Terraform resource name is unique:
+# by_name:
+#   datasets:
+#     egress_gib: 100

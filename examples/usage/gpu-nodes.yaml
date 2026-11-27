@@ -1,0 +1,37 @@
+# Pattern: GPU nodes — planned capacity / utilization
+#
+# When to use:
+#   Training or inference fleets where Terraform alone under-specifies how many
+#   GPU nodes run (autoscaling) or how much of the period a Serverless AI
+#   endpoint is up. Without these metrics you get warnings and zero/assumed
+#   full-duty costs.
+#
+# What this models (there is no separate "gpu_hours" key):
+#   - MK8s GPU node groups → node_count (point estimate for the period)
+#   - Serverless AI endpoints → running_fraction 0..1 (GPU hours ≈ fraction × period)
+#   - Local SSD on GPU instances / node templates → local_ssd_gib
+#
+# Pair with: examples/plans/gpu-nodes.json
+# Also works with: tests/fixtures/plan_coverage.json (workers + api addresses)
+#
+#   nebius-tf-cost estimate \
+#     --plan examples/plans/gpu-nodes.json \
+#     --usage-file examples/usage/gpu-nodes.yaml \
+#     --period month
+
+defaults: {}
+
+resources:
+  # Autoscale GPU node group: pin a planned steady-state count so min==max.
+  # Omit node_count to keep Terraform min_node_count..max_node_count as the band.
+  nebius_mk8s_v1_node_group.gpu_workers:
+    node_count: 4 # planned GPU nodes for this estimate window
+
+  # Serverless AI: 25% of the period running ≈ 0.25 × period GPU hours at list rates.
+  # Use 0 for stopped endpoints (compute billed only while running).
+  nebius_ai_v1_endpoint.inference:
+    running_fraction: 0.25
+
+  # Optional: local disks size is not in Terraform; set when local_disks is requested.
+  nebius_compute_v1_instance.trainer:
+    local_ssd_gib: 3500 # GiB local SSD attached to the GPU VM

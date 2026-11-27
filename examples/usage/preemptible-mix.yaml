@@ -1,0 +1,39 @@
+# Pattern: Preemptible / spot mix — on-demand + spot in one plan
+#
+# When to use:
+#   Fleets that combine always-on (on-demand) GPU/CPU with preemptible/spot
+#   capacity. Terraform marks spot via `preemptible` / `follows_spot_price`
+#   (not a usage-file key). This file only supplies usage overlays that still
+#   matter for mixed fleets (node counts, local SSD, Serverless duty cycle).
+#
+# Pricing bounds (CLI, not usage metrics):
+#   --preemptible-policy on_demand  # default: min = published floor / fixed
+#                                   # preemptible rates; max = on-demand (budget)
+#   --preemptible-policy floor      # min = max = published floor / fixed rates
+#   --preemptible-policy reject     # spot resources → unknown
+#
+# Pair with: examples/plans/preemptible-mix.json
+# Also see: tests/fixtures/plan_minmax.json, plan_spot_l40s.json
+#
+#   nebius-tf-cost estimate \
+#     --plan examples/plans/preemptible-mix.json \
+#     --usage-file examples/usage/preemptible-mix.yaml \
+#     --period month \
+#     --preemptible-policy on_demand
+
+defaults: {}
+
+resources:
+  # Spot/preemptible GPU node group: pin planned size so min/max reflect
+  # spot floors (or fixed L40S preemptible rates) × this count, not autoscaling.
+  nebius_mk8s_v1_node_group.spot_gpu:
+    node_count: 8
+
+  # On-demand GPU node group in the same cluster — list rates for both bounds.
+  nebius_mk8s_v1_node_group.ondemand_gpu:
+    node_count: 2
+
+  # Optional Serverless endpoint that follows spot pricing in Terraform:
+  # running_fraction still scales GPU hours; policy still sets min/max rates.
+  nebius_ai_v1_endpoint.batch:
+    running_fraction: 0.5

@@ -65,9 +65,18 @@ nebius-tf-cost estimate --plan plan.json \
 
 These set **defaults** for all resources. Prefer `--usage-file` when different buckets or groups need different numbers.
 
-## Example
+## Examples
 
-See [`examples/usage.yaml`](../examples/usage.yaml) in the repo.
+| Path | Pattern |
+|------|---------|
+| [`examples/usage.yaml`](../examples/usage.yaml) | Short demo for `examples/sample-plan.json` |
+| [`examples/usage/gpu-nodes.yaml`](../examples/usage/gpu-nodes.yaml) | GPU MK8s `node_count`, Serverless `running_fraction`, `local_ssd_gib` |
+| [`examples/usage/object-storage-egress.yaml`](../examples/usage/object-storage-egress.yaml) | Bucket storage / requests / egress |
+| [`examples/usage/preemptible-mix.yaml`](../examples/usage/preemptible-mix.yaml) | Usage overlay for on-demand + spot fleets (`--preemptible-policy`) |
+
+Index and demo commands: [`examples/usage/README.md`](../examples/usage/README.md). Companion mini-plans live under [`examples/plans/`](../examples/plans/).
+
+There is no separate `gpu_hours` metric: GPU utilization is modeled with `node_count` (MK8s) and `running_fraction` (Serverless AI). Spot vs on-demand comes from Terraform `preemptible` / `follows_spot_price`, not from the usage file.
 
 ## Tips
 
@@ -75,5 +84,6 @@ See [`examples/usage.yaml`](../examples/usage.yaml) in the repo.
 2. Prefer full addresses under `resources:` when names collide across modules.
 3. For autoscaling node groups, set `node_count` for a point estimate, or rely on min/max node counts in Terraform for the estimate’s min/max band.
 4. Refresh usage as your capacity plan changes; the catalog prices the metrics, it does not infer them.
+5. For mixed on-demand + preemptible plans, pass `--preemptible-policy` so min/max and spot floors match your intent (see `examples/usage/preemptible-mix.yaml`).
 
 For **quote-only catalog rates** (VAST, GB200/GB300, `NETWORK_HDD`), see [catalog-price.md](catalog-price.md) (`--catalog-price`) — that flag fills missing **prices**, not planned usage volumes.

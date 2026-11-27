@@ -1,6 +1,6 @@
 # nebius-tf-cost
 
-[![CI](https://github.com/alon-sage/nebius-tf-cost-estimate/actions/workflows/ci.yml/badge.svg)](https://github.com/alon-sage/nebius-tf-cost-estimate/actions/workflows/ci.yml)
+[![CI](https://github.com/yacompsci/nebius-tf-cost-estimate/actions/workflows/ci.yml/badge.svg)](https://github.com/yacompsci/nebius-tf-cost-estimate/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
@@ -13,6 +13,8 @@ Uses a vendored public price catalog (`data/prices.json`) derived from [Nebius d
 ## Install
 
 ```bash
+git clone https://github.com/yacompsci/nebius-tf-cost-estimate.git
+cd nebius-tf-cost-estimate
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
@@ -171,7 +173,7 @@ Weekly GitHub Actions workflow [`.github/workflows/discover-uncovered-types.yml`
 - Issues are coverage feature requests only — they do **not** invent prices
 
 ```bash
-python scripts/discover_uncovered_types.py --dry-run --repo owner/nebius-tf-cost-estimate
+python scripts/discover_uncovered_types.py --dry-run --repo yacompsci/nebius-tf-cost-estimate
 ```
 
 ## Min vs max

@@ -21,6 +21,12 @@ dev = [
   "ruff>=0.6",
 ]
 
+[project.urls]
+Homepage = "https://github.com/yacompsci/nebius-tf-cost-estimate"
+Repository = "https://github.com/yacompsci/nebius-tf-cost-estimate"
+Issues = "https://github.com/yacompsci/nebius-tf-cost-estimate/issues"
+Changelog = "https://github.com/yacompsci/nebius-tf-cost-estimate/blob/main/CHANGELOG.md"
+
 [project.scripts]
 nebius-tf-cost = "nebius_tf_cost.cli:main"
 

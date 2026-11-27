@@ -95,7 +95,11 @@ While working, append notes under `[Unreleased]` in [CHANGELOG.md](CHANGELOG.md)
    which creates a GitHub Release from the matching CHANGELOG section.
 
 PyPI publish is **not** part of this flow yet (follow-up when packaging/publish is ready).
-Until then, consumers install from git or a local editable checkout.
+Until then, consumers install from git or a local editable checkout:
+
+```bash
+pip install "git+https://github.com/yacompsci/nebius-tf-cost-estimate.git"
+```
 
 ## Security reports
 

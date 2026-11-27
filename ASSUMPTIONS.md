@@ -40,8 +40,8 @@ JSON includes `*_min` / `*_max` fields; `before_total` / `after_total` / `delta`
 - Designed for `terraform show -json` **plan** (`resource_changes`) and **state** (`values.root_module`).
 - Only `nebius/nebius` provider resources are priced; other providers are ignored.
 - Plan **delta** = sum(after) − sum(before) for resources present on each side of the change.
-- Nested managed boot disks on `nebius_compute_v1_instance` are included when `boot_disk.managed_disk.spec` includes a size (`size_*`).
-- Instance `boot_disk.existing_disk` (id-only) or managed stubs without size are **ignored** on the instance line (no price, no “missing size” / “boot disk price unknown” warning). Price those disks only when they appear as `nebius_compute_v1_disk` (or equivalent) in the plan/state input — avoids double-counting and false unknowns.
+- Nested managed disks on `nebius_compute_v1_instance` are included when `boot_disk.managed_disk.spec` or a `secondary_disks[]` entry’s `managed_disk.spec` includes a size (`size_*`).
+- Instance `boot_disk` / `secondary_disks[]` with `existing_disk` (id-only) or managed stubs without size are **ignored** on the instance line (no price, no “missing size” / disk-unknown warning). Price those disks only when they appear as `nebius_compute_v1_disk` (or equivalent) in the plan/state input — avoids double-counting and false unknowns. Inline sized managed specs are folded into the instance; Terraform typically does not also emit a separate disk resource for the same inline disk, so we do not attempt id-based dedupe.
 - `nebius_mk8s_v1_node_group` / `v1alpha1` templates are priced as Compute: `template.resources` × node count + per-node boot disk.
 - `nebius_ai_v1_endpoint` is priced as Compute while running (Serverless AI public pricing). Prefer `platform`+`preset` in plan/state; `gpu`/`cpu` selectors are best-effort mapped.
 

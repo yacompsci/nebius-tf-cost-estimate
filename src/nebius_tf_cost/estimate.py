@@ -171,21 +171,24 @@ def _size_gib(values: dict[str, Any]) -> float | None:
     return None
 
 
-def _inline_managed_boot_disk_spec(boot: Any) -> dict[str, Any] | None:
-    """Return ``boot_disk.managed_disk.spec`` only when it is self-contained.
+def _inline_managed_disk_spec(attachment: Any) -> dict[str, Any] | None:
+    """Return ``managed_disk.spec`` from a disk attachment only when self-contained.
 
-    Instances often attach a separately managed disk via ``existing_disk.id``
-    (or a managed_disk stub without size). Those disks must be priced only when
-    they appear as ``nebius_compute_v1_disk`` (or equivalent) resources — not
-    folded into the instance with a missing-size warning.
+    Used for instance ``boot_disk`` and each ``secondary_disks[]`` entry. Attachments
+    via ``existing_disk.id`` (or a managed_disk stub without size) must be priced
+    only when they appear as ``nebius_compute_v1_disk`` (or equivalent) resources —
+    not folded into the instance with a missing-size warning. Typical
+    ``disk`` resource + ``existing_disk`` attach therefore counts once; Terraform
+    rarely emits both a sized inline managed spec and a separate disk resource for
+    the same disk, so we do not attempt id-based dedupe.
     """
-    if not isinstance(boot, dict) or not boot:
+    if not isinstance(attachment, dict) or not attachment:
         return None
     # ID/name-only attachment: never fold into the instance line.
-    existing = boot.get("existing_disk")
+    existing = attachment.get("existing_disk")
     if isinstance(existing, dict) and existing:
         return None
-    managed = boot.get("managed_disk")
+    managed = attachment.get("managed_disk")
     if not isinstance(managed, dict) or not managed:
         return None
     spec = managed.get("spec")
@@ -195,6 +198,11 @@ def _inline_managed_boot_disk_spec(boot: Any) -> dict[str, Any] | None:
     if _size_gib(spec) is None:
         return None
     return spec
+
+
+def _inline_managed_boot_disk_spec(boot: Any) -> dict[str, Any] | None:
+    """Alias for :func:`_inline_managed_disk_spec` (boot_disk attachment)."""
+    return _inline_managed_disk_spec(boot)
 
 
 def _is_preemptible(values: dict[str, Any]) -> bool:
@@ -577,8 +585,8 @@ def estimate_instance(
     compute_min = scale_hourly(parts.hourly_min, cfg.period, month_hours=catalog.month_hours)
     compute_max = scale_hourly(parts.hourly_max, cfg.period, month_hours=catalog.month_hours)
 
-    disk_amount = 0.0
-    boot_spec = _inline_managed_boot_disk_spec(values.get("boot_disk"))
+    boot_amount = 0.0
+    boot_spec = _inline_managed_disk_spec(values.get("boot_disk"))
     if boot_spec is not None:
         disk_item = _estimate_disk_values(
             snap.address + ".boot_disk",
@@ -588,10 +596,34 @@ def estimate_instance(
             catalog,
             cfg,
         )
-        disk_amount = disk_item.amount_max
+        boot_amount = disk_item.amount_max
         warnings.extend(disk_item.warnings)
         if disk_item.unknown:
             warnings.append(f"{snap.address}: boot disk price unknown")
+
+    secondary_amount = 0.0
+    secondary = values.get("secondary_disks") or []
+    if isinstance(secondary, dict):
+        secondary = [secondary]
+    if isinstance(secondary, list):
+        for idx, entry in enumerate(secondary):
+            sec_spec = _inline_managed_disk_spec(entry)
+            if sec_spec is None:
+                continue
+            disk_item = _estimate_disk_values(
+                f"{snap.address}.secondary_disks[{idx}]",
+                snap.type,
+                snap.side,
+                sec_spec,
+                catalog,
+                cfg,
+            )
+            secondary_amount += disk_item.amount_max
+            warnings.extend(disk_item.warnings)
+            if disk_item.unknown:
+                warnings.append(f"{snap.address}: secondary disk[{idx}] price unknown")
+
+    disk_amount = boot_amount + secondary_amount
 
     local_amount, local_warnings, local_missing = _local_ssd_amount(
         snap.address, values, catalog, cfg, usage, resource_name=snap.name
@@ -601,8 +633,10 @@ def estimate_instance(
     total_min = compute_min + disk_amount + local_amount
     total_max = compute_max + disk_amount + local_amount
     details = f"{parts.details} compute_min={compute_min:.6f} compute_max={compute_max:.6f}"
-    if disk_amount:
-        details += f" boot_disk={disk_amount:.6f}"
+    if boot_amount:
+        details += f" boot_disk={boot_amount:.6f}"
+    if secondary_amount:
+        details += f" secondary_disks={secondary_amount:.6f}"
     if local_amount:
         details += f" local_ssd={local_amount:.6f}"
     return _line(

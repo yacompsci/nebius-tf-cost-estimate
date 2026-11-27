@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Security report
-    url: https://github.com/alon-sage/nebius-tf-cost-estimate/security/advisories/new
+    url: https://github.com/yacompsci/nebius-tf-cost-estimate/security/advisories/new
     about: Please report vulnerabilities privately (see SECURITY.md).
   - name: Assumptions and known gaps
-    url: https://github.com/alon-sage/nebius-tf-cost-estimate/blob/main/ASSUMPTIONS.md
+    url: https://github.com/yacompsci/nebius-tf-cost-estimate/blob/main/ASSUMPTIONS.md
     about: Pricing semantics, min/max bounds, and documented unpriced types.

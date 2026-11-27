@@ -10,6 +10,13 @@ and as the installed package version via setuptools dynamic metadata).
 
 ## [Unreleased]
 
+### Changed
+
+- Canonical repository is now
+  [yacompsci/nebius-tf-cost-estimate](https://github.com/yacompsci/nebius-tf-cost-estimate)
+  (moved from `alon-sage/nebius-tf-cost-estimate`). Historical PR links below still
+  point at the previous owner; GitHub redirects when available.
+
 ## [1.0.0] - 2026-11-27
 
 First declared SemVer release. The package previously carried an undeclared `0.1.0`
@@ -62,5 +69,5 @@ work on `main` (PRs #1–#17).
   ([#6](https://github.com/alon-sage/nebius-tf-cost-estimate/pull/6)).
 - Code of Conduct enforcement contact wording ([#10](https://github.com/alon-sage/nebius-tf-cost-estimate/pull/10)).
 
-[Unreleased]: https://github.com/alon-sage/nebius-tf-cost-estimate/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/alon-sage/nebius-tf-cost-estimate/releases/tag/v1.0.0
+[Unreleased]: https://github.com/yacompsci/nebius-tf-cost-estimate/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/yacompsci/nebius-tf-cost-estimate/releases/tag/v1.0.0

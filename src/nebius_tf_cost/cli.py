@@ -122,7 +122,12 @@ exit codes:
         "--mode",
         choices=["auto", "plan", "state", "total"],
         default="auto",
-        help="auto: plan=>delta+after, state=>total; total forces after-only",
+        help=(
+            "How to frame totals (not which file to load — use --plan/--state/--input). "
+            "auto (default): plan JSON => Before/After/Delta; state JSON => After only "
+            "(Before=0). total|state: force After-only even on a plan. "
+            "plan: keep Before/After for delta."
+        ),
     )
     est.add_argument(
         "--preemptible-policy",

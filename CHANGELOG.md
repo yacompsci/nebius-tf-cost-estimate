@@ -20,6 +20,9 @@ and as the installed package version via setuptools dynamic metadata).
 
 ### Changed
 
+- Document `--mode` clearly in README and argparse help: frames totals as delta
+  (Before/After/Delta) vs after-only (Before=0); input still comes from
+  `--plan` / `--state` / `--input`.
 - Canonical repository is now
   [yacompsci/nebius-tf-cost-estimate](https://github.com/yacompsci/nebius-tf-cost-estimate)
   (moved from `alon-sage/nebius-tf-cost-estimate`). Historical PR links below still

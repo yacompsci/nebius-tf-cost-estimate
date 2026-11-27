@@ -34,6 +34,27 @@ nebius-tf-cost estimate \
 
 Expected: prints before/after/delta **min and max** totals, line items, warnings for unpriced or zero-usage resources, and a budget verdict gated on **max**. Add `--strict-check` in CI to fail on budget exceed, missing planned usage, or unknown/unpriced resources.
 
+`--mode` controls whether those totals are a **delta** (Before / After / Delta) or a **total** (After only, Before=0). It does **not** choose the input file — still use `--plan` / `--state` / `--input` for that.
+
+| `--mode` | Behavior |
+|----------|----------|
+| `auto` (default) | Plan JSON → delta + after; state JSON → total. Matches what those inputs contain (plan has before/after; state is current inventory). |
+| `total` | Force after-only even on a plan (proposed bill without the change). |
+| `plan` | Keep before/after for delta. |
+| `state` | Same aggregation as `total` (after-only) — effectively an alias; `auto` + a state document already resolves to `total`. |
+
+Useful override: after-only on a **plan** file:
+
+```bash
+nebius-tf-cost estimate --plan examples/sample-plan.json --mode total --period month
+```
+
+On a state run, `auto` already means total (Before stays 0):
+
+```bash
+nebius-tf-cost estimate --state state.json --period month
+```
+
 More copy-paste pairs: [examples/usage/README.md](examples/usage/README.md).
 
 To estimate **your** stack, export plan JSON and pass that same path:
@@ -80,6 +101,7 @@ make e2e
 | Flag | Description |
 |------|-------------|
 | `--plan` / `--state` / `--input` | Terraform JSON source (mutually exclusive) |
+| `--mode auto\|plan\|state\|total` | Frame totals as delta or after-only (default `auto`; see Demo). Does not select the input file |
 | `--period hour\|month\|year` | Totals period (`month` = 730h per Nebius docs) |
 | `--currency USD\|ILS` | Catalog currency |
 | `--budget AMOUNT` | Budget in `--currency` for the selected period |

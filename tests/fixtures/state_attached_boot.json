@@ -1,0 +1,172 @@
+{
+  "format_version": "1.0",
+  "terraform_version": "1.9.0",
+  "values": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "nebius_compute_v1_disk.gw_boot",
+          "mode": "managed",
+          "type": "nebius_compute_v1_disk",
+          "name": "gw_boot",
+          "provider_name": "registry.terraform.io/nebius/nebius",
+          "instances": [
+            {
+              "index_key": 0,
+              "attributes": {
+                "id": "computdisk-gw0",
+                "name": "gw-boot-0",
+                "type": "NETWORK_SSD",
+                "size_gibibytes": 100
+              }
+            },
+            {
+              "index_key": 1,
+              "attributes": {
+                "id": "computdisk-gw1",
+                "name": "gw-boot-1",
+                "type": "NETWORK_SSD",
+                "size_gibibytes": 100
+              }
+            }
+          ]
+        },
+        {
+          "address": "nebius_compute_v1_disk.sms_boot",
+          "mode": "managed",
+          "type": "nebius_compute_v1_disk",
+          "name": "sms_boot",
+          "provider_name": "registry.terraform.io/nebius/nebius",
+          "instances": [
+            {
+              "attributes": {
+                "id": "computdisk-sms",
+                "name": "sms-boot",
+                "type": "NETWORK_SSD",
+                "size_gibibytes": 100
+              }
+            }
+          ]
+        },
+        {
+          "address": "nebius_compute_v1_instance.bastion",
+          "mode": "managed",
+          "type": "nebius_compute_v1_instance",
+          "name": "bastion",
+          "provider_name": "registry.terraform.io/nebius/nebius",
+          "instances": [
+            {
+              "attributes": {
+                "name": "bastion",
+                "resources": {
+                  "platform": "cpu-e2",
+                  "preset": "2vcpu-8gb"
+                },
+                "boot_disk": {
+                  "attach_mode": "READ_WRITE",
+                  "managed_disk": {
+                    "name": "bastion-boot",
+                    "spec": {
+                      "type": "NETWORK_SSD",
+                      "size_gibibytes": 100
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "address": "nebius_compute_v1_instance.gw",
+          "mode": "managed",
+          "type": "nebius_compute_v1_instance",
+          "name": "gw",
+          "provider_name": "registry.terraform.io/nebius/nebius",
+          "instances": [
+            {
+              "index_key": 0,
+              "attributes": {
+                "name": "gw-0",
+                "resources": {
+                  "platform": "cpu-e2",
+                  "preset": "2vcpu-8gb"
+                },
+                "boot_disk": {
+                  "attach_mode": "READ_WRITE",
+                  "existing_disk": {
+                    "id": "computdisk-gw0"
+                  }
+                }
+              }
+            },
+            {
+              "index_key": 1,
+              "attributes": {
+                "name": "gw-1",
+                "resources": {
+                  "platform": "cpu-e2",
+                  "preset": "2vcpu-8gb"
+                },
+                "boot_disk": {
+                  "attach_mode": "READ_WRITE",
+                  "existing_disk": {
+                    "id": "computdisk-gw1"
+                  },
+                  "managed_disk": null
+                }
+              }
+            }
+          ]
+        },
+        {
+          "address": "nebius_compute_v1_instance.sms",
+          "mode": "managed",
+          "type": "nebius_compute_v1_instance",
+          "name": "sms",
+          "provider_name": "registry.terraform.io/nebius/nebius",
+          "instances": [
+            {
+              "attributes": {
+                "name": "sms",
+                "resources": {
+                  "platform": "cpu-e2",
+                  "preset": "2vcpu-8gb"
+                },
+                "boot_disk": {
+                  "attach_mode": "READ_WRITE",
+                  "existing_disk": {
+                    "id": "computdisk-sms"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "address": "nebius_compute_v1_instance.external_boot",
+          "mode": "managed",
+          "type": "nebius_compute_v1_instance",
+          "name": "external_boot",
+          "provider_name": "registry.terraform.io/nebius/nebius",
+          "instances": [
+            {
+              "attributes": {
+                "name": "external-boot",
+                "resources": {
+                  "platform": "cpu-e2",
+                  "preset": "2vcpu-8gb"
+                },
+                "boot_disk": {
+                  "attach_mode": "READ_WRITE",
+                  "existing_disk": {
+                    "id": "computdisk-outside-state"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

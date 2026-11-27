@@ -1,7 +1,8 @@
 name: Release
 
 # Creates a GitHub Release when a SemVer tag (vX.Y.Z) is pushed.
-# Does not publish to PyPI — that remains a follow-up.
+# Publishing the release then triggers `.github/workflows/publish-pypi.yml`
+# (Trusted Publishing / OIDC — see CONTRIBUTING.md).
 
 on:
   push:

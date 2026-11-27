@@ -8,17 +8,22 @@ dynamic = ["version"]
 description = "Estimate Nebius AI Cloud costs from Terraform plan/state JSON"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
 authors = [{ name = "Nebius TF Cost Estimate" }]
+keywords = ["nebius", "terraform", "cost", "estimate", "finops"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: System :: Systems Administration",
+]
 dependencies = [
   "PyYAML>=6.0",
-]
-
-[project.optional-dependencies]
-dev = [
-  "pytest>=7.4",
-  "pytest-cov>=5.0",
-  "ruff>=0.6",
 ]
 
 [project.urls]
@@ -26,6 +31,14 @@ Homepage = "https://github.com/yacompsci/nebius-tf-cost-estimate"
 Repository = "https://github.com/yacompsci/nebius-tf-cost-estimate"
 Issues = "https://github.com/yacompsci/nebius-tf-cost-estimate/issues"
 Changelog = "https://github.com/yacompsci/nebius-tf-cost-estimate/blob/main/CHANGELOG.md"
+
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4",
+  "pytest-cov>=5.0",
+  "ruff>=0.6",
+]
 
 [project.scripts]
 nebius-tf-cost = "nebius_tf_cost.cli:main"

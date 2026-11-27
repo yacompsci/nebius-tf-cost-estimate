@@ -10,33 +10,12 @@ and as the installed package version via setuptools dynamic metadata).
 
 ## [Unreleased]
 
-### Fixed
-
-- Instance `secondary_disks[]` with inline sized `managed_disk.spec` are folded into
-  the instance estimate (previously silent underprice). `existing_disk` / size-less
-  stubs stay ignored on the instance line — same attach-by-ref rules as boot disks.
-- Instance boot disks attached by `existing_disk` (id-only) or without inline
-  `managed_disk.spec` size are ignored on the instance line — no “missing size_*”
-  / “boot disk price unknown” warnings and no double-count when the disk is already
-  a `nebius_compute_v1_disk` resource. Inline sized managed boot disks still fold
-  into the instance estimate.
-
-### Changed
-
-- Document `--mode` clearly in README and argparse help: frames totals as delta
-  (Before/After/Delta) vs after-only (Before=0); input still comes from
-  `--plan` / `--state` / `--input`.
-- Canonical repository is now
-  [yacompsci/nebius-tf-cost-estimate](https://github.com/yacompsci/nebius-tf-cost-estimate)
-  (moved from `alon-sage/nebius-tf-cost-estimate`). Historical PR links below still
-  point at the previous owner; GitHub redirects when available.
-
 ## [1.0.0] - 2026-11-27
 
 First declared SemVer release. The package previously carried an undeclared `0.1.0`
 placeholder in packaging metadata; **1.0.0** marks the current CLI surface as stable for
 CI adoption (see README). Pre-1.0 development history is summarized below from merged
-work on `main` (PRs #1–#17).
+work on `main` (through PR [#23](https://github.com/yacompsci/nebius-tf-cost-estimate/pull/23)).
 
 ### Added
 
@@ -65,8 +44,10 @@ work on `main` (PRs #1–#17).
   ([#16](https://github.com/alon-sage/nebius-tf-cost-estimate/pull/16)).
 - Copy-paste usage-file examples under `examples/usage/` (GPU nodes, Object Storage egress,
   preemptible mix) with companion plan JSON ([#17](https://github.com/alon-sage/nebius-tf-cost-estimate/pull/17)).
-- SemVer + Keep a Changelog process documented in CONTRIBUTING; optional tag → GitHub
-  Release workflow.
+- SemVer + Keep a Changelog process documented in CONTRIBUTING; tag → GitHub Release
+  workflow ([#18](https://github.com/alon-sage/nebius-tf-cost-estimate/pull/18)).
+- PyPI Trusted Publishing workflow (`.github/workflows/publish-pypi.yml`) for package
+  `nebius-tf-cost` (OIDC; no long-lived API token in CI).
 
 ### Changed
 
@@ -76,12 +57,33 @@ work on `main` (PRs #1–#17).
   targets ([#6](https://github.com/alon-sage/nebius-tf-cost-estimate/pull/6)).
 - Package version is read from `nebius_tf_cost.__version__` only (setuptools dynamic
   version); CLI `--version` uses the same value.
+- Document `--mode` clearly in README and argparse help: frames totals as delta
+  (Before/After/Delta) vs after-only (Before=0); input still comes from
+  `--plan` / `--state` / `--input`
+  ([#22](https://github.com/yacompsci/nebius-tf-cost-estimate/pull/22)).
+- Canonical repository is now
+  [yacompsci/nebius-tf-cost-estimate](https://github.com/yacompsci/nebius-tf-cost-estimate)
+  (moved from `alon-sage/nebius-tf-cost-estimate`). Historical PR links below still
+  point at the previous owner; GitHub redirects when available
+  ([#20](https://github.com/yacompsci/nebius-tf-cost-estimate/pull/20)).
 
 ### Fixed
 
 - Correct flattening of Terraform `planned_values` resources that use a `values` map
   ([#6](https://github.com/alon-sage/nebius-tf-cost-estimate/pull/6)).
 - Code of Conduct enforcement contact wording ([#10](https://github.com/alon-sage/nebius-tf-cost-estimate/pull/10)).
+- README Demo uses `examples/sample-plan.json` (matched to committed sample usage)
+  ([#19](https://github.com/alon-sage/nebius-tf-cost-estimate/pull/19)).
+- Instance boot disks attached by `existing_disk` (id-only) or without inline
+  `managed_disk.spec` size are ignored on the instance line — no “missing size_*”
+  / “boot disk price unknown” warnings and no double-count when the disk is already
+  a `nebius_compute_v1_disk` resource. Inline sized managed boot disks still fold
+  into the instance estimate
+  ([#21](https://github.com/yacompsci/nebius-tf-cost-estimate/pull/21)).
+- Instance `secondary_disks[]` with inline sized `managed_disk.spec` are folded into
+  the instance estimate (previously silent underprice). `existing_disk` / size-less
+  stubs stay ignored on the instance line — same attach-by-ref rules as boot disks
+  ([#23](https://github.com/yacompsci/nebius-tf-cost-estimate/pull/23)).
 
 [Unreleased]: https://github.com/yacompsci/nebius-tf-cost-estimate/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/yacompsci/nebius-tf-cost-estimate/releases/tag/v1.0.0

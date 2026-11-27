@@ -12,12 +12,27 @@ Uses a vendored public price catalog (`data/prices.json`) derived from [Nebius d
 
 ## Install
 
+From [PyPI](https://pypi.org/project/nebius-tf-cost/) (once the `v*` release publish has succeeded):
+
+```bash
+pip install nebius-tf-cost
+nebius-tf-cost --version
+```
+
+From source (development / before PyPI is live):
+
 ```bash
 git clone https://github.com/yacompsci/nebius-tf-cost-estimate.git
 cd nebius-tf-cost-estimate
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+```
+
+Or without cloning:
+
+```bash
+pip install "git+https://github.com/yacompsci/nebius-tf-cost-estimate.git"
 ```
 
 ## Demo

@@ -57,7 +57,7 @@ CI job `e2e-terraform` runs the same command. Local runs skip when `terraform` i
 ## Pricing and coverage changes
 
 - Document semantic changes in [ASSUMPTIONS.md](ASSUMPTIONS.md).
-- Usage-based metrics: update [docs/usage-file.md](docs/usage-file.md) and examples when adding keys.
+- Usage-based metrics: update [docs/usage-file.md](docs/usage-file.md) and examples when adding keys (keep [examples/usage/](examples/usage/) pattern files in sync when the schema or common patterns change).
 - Catalog price overrides (`--catalog-price`): update [docs/catalog-price.md](docs/catalog-price.md) and `KNOWN_BARE_KEYS` / parsers when adding keys; do not invent default catalog rates for quote-only SKUs.
 - New provider types: register estimators in `estimate.ESTIMATORS` (and/or `free_resource_types` in the catalog). The scheduled workflow [`.github/workflows/discover-uncovered-types.yml`](.github/workflows/discover-uncovered-types.yml) opens coverage issues for newly uncovered types — those issues are requests only; they do not invent prices.
 

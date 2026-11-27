@@ -59,6 +59,7 @@ JSON includes `*_min` / `*_max` fields; `before_total` / `after_total` / `delta`
 
 - Without `--usage-file` / `--usage-metric`, Object Storage storage/request/egress cost is **0** with a warning.
 - Autoscaling node groups without `node_count` use **min** = `min_node_count` (else `initial_node_count`) and **max** = `max_node_count` (else initial/min), with a warning.
+- Copy-paste planned-usage patterns (GPU nodes, Object Storage egress, preemptible mix): [examples/usage/](examples/usage/) — see [docs/usage-file.md](docs/usage-file.md).
 
 ## Free / control-plane resources
 

@@ -1,5 +1,8 @@
 # Planned usage for usage-based resources (Object Storage, etc.).
 # Addresses match Terraform resource addresses from plan/state JSON.
+#
+# More copy-paste patterns (GPU nodes, object-storage egress, preemptible mix):
+#   examples/usage/   — see examples/usage/README.md
 
 defaults:
   stored_gib: 0

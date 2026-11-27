@@ -1,0 +1,86 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.0",
+  "resource_changes": [
+    {
+      "address": "nebius_mk8s_v1_node_group.gpu_workers",
+      "mode": "managed",
+      "type": "nebius_mk8s_v1_node_group",
+      "name": "gpu_workers",
+      "provider_name": "registry.terraform.io/nebius/nebius",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "gpu_workers",
+          "autoscaling": {
+            "min_node_count": 1,
+            "max_node_count": 8,
+            "initial_node_count": 2
+          },
+          "template": {
+            "resources": {
+              "platform": "gpu-h100-sxm",
+              "preset": "1gpu-16vcpu-200gb"
+            },
+            "boot_disk": {
+              "type": "NETWORK_SSD",
+              "size_gibibytes": 100
+            }
+          }
+        }
+      }
+    },
+    {
+      "address": "nebius_ai_v1_endpoint.inference",
+      "mode": "managed",
+      "type": "nebius_ai_v1_endpoint",
+      "name": "inference",
+      "provider_name": "registry.terraform.io/nebius/nebius",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "inference",
+          "platform": "gpu-h100-sxm",
+          "preset": "1gpu-16vcpu-200gb",
+          "disk": {
+            "type": "NETWORK_SSD",
+            "size_gibibytes": 100
+          }
+        }
+      }
+    },
+    {
+      "address": "nebius_compute_v1_instance.trainer",
+      "mode": "managed",
+      "type": "nebius_compute_v1_instance",
+      "name": "trainer",
+      "provider_name": "registry.terraform.io/nebius/nebius",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "trainer",
+          "resources": {
+            "platform": "gpu-h100-sxm",
+            "preset": "1gpu-16vcpu-200gb"
+          },
+          "local_disks": {
+            "passthrough_group": {
+              "requested": true
+            }
+          },
+          "boot_disk": {
+            "managed_disk": {
+              "spec": {
+                "type": "NETWORK_SSD",
+                "size_gibibytes": 100
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

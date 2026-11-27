@@ -12,6 +12,8 @@ Guidance for coding agents and humans automating changes in this repo.
 | `tests/` | Pytest suite (default excludes `@pytest.mark.e2e`) |
 | `tests/e2e/` | Plan-only Terraform e2e (optional; needs `terraform` CLI) |
 | `examples/` | Sample plan JSON + usage file for demos |
+| `examples/usage/` | Copy-paste planned-usage patterns (GPU, egress, preemptible mix) |
+| `examples/plans/` | Mini plan JSON paired with those usage patterns |
 | `scripts/refresh_catalog.py` | Refresh / spot-snapshot helpers from public docs |
 | `scripts/discover_uncovered_types.py` | Diff provider docs vs estimators / free types |
 | `docs/usage-file.md` | Planned usage file format |

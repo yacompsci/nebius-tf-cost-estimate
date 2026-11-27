@@ -22,7 +22,8 @@
       "https://docs.nebius.com/signup-billing/spot-prices.md",
       "https://docs.nebius.com/signup-billing/pricing-policy.md",
       "https://docs.nebius.com/compute/virtual-machines/preemptible.md",
-      "https://nebius.com/spot-prices"
+      "https://nebius.com/spot-prices",
+      "https://nebius.com/prices"
     ],
     "notes": [
       "Prices are published list rates without taxes/VAT.",
@@ -30,7 +31,9 @@
       "Fixed preemptible component rates (preemptible{}) come from compute pricing for L40S; not dynamic spot.",
       "Live spot prices (public SpotPriceService API / nebius.com/spot-prices) change often and are not vendored as floors \u2014 refresh_catalog.py can print a snapshot for comparison.",
       "Do not invent spot floors for platforms absent from the published tables.",
-      "NETWORK_HDD, WEKA, and VAST have no public list price in compute pricing as of catalog fetch \u2014 estimators emit unknown warnings.",
+      "WEKA filesystem USD rate is from nebius.com/prices ($0.10/GiB/month); ILS not published there.",
+      "NETWORK_HDD and VAST have no public list price as of catalog fetch \u2014 estimators emit unknown warnings unless --catalog-price supplies a quote rate.",
+      "GB200/GB300 platform rates are quote-only; pass --catalog-price platform.GB200=... / GB300=... .",
       "Serverless AI and MK8s nodes bill as Compute; Observability is free while in preview.",
       "Refresh with: python scripts/refresh_catalog.py (manual review recommended)."
     ]
@@ -163,7 +166,7 @@
     "NETWORK_HDD": {
       "usd": null,
       "ils": null,
-      "note": "No public list price in compute pricing as of catalog fetch"
+      "note": "No public list price \u2014 use --catalog-price disk.NETWORK_HDD=..."
     }
   },
   "disk_snapshot_gib_month": {
@@ -178,17 +181,17 @@
     "NETWORK_HDD": {
       "usd": null,
       "ils": null,
-      "note": "No public list price in compute pricing as of catalog fetch"
+      "note": "No public list price \u2014 use --catalog-price filesystem.NETWORK_HDD=..."
     },
     "WEKA": {
-      "usd": null,
+      "usd": 0.1,
       "ils": null,
-      "note": "No public list price in compute pricing as of catalog fetch"
+      "note": "USD from nebius.com/prices ($0.10/GiB/month); ILS not published on that page"
     },
     "VAST": {
       "usd": null,
       "ils": null,
-      "note": "No public list price in compute pricing as of catalog fetch"
+      "note": "No public list price \u2014 quote/enterprise; use --catalog-price VAST=..."
     }
   },
   "local_ssd_gib_month": {
@@ -334,10 +337,10 @@
     "nebius_compute_v1_nvl_instance_group": "NVLink instance group is a capacity handle; member Compute instances bill separately. GB200/GB300 platform list prices were not published in compute pricing at catalog fetch."
   },
   "unpriced_gaps": {
-    "NETWORK_HDD": "Disk and filesystem type present in Terraform; no public USD/ILS list price",
-    "WEKA": "Shared filesystem type; no public list price",
-    "VAST": "Shared filesystem type; no public list price",
-    "GB200/GB300": "NVL instance group types; no public per-GPU list price in compute pricing page",
+    "NETWORK_HDD": "Disk and filesystem type present in Terraform; no public USD/ILS list price — use --catalog-price disk.NETWORK_HDD=... / filesystem.NETWORK_HDD=...",
+    "VAST": "Shared filesystem type; quote/enterprise — use --catalog-price VAST=... ($/GiB·month)",
+    "GB200/GB300": "NVL member platforms; no public per-GPU list price — use --catalog-price platform.GB200=... / GB300=... ($/GPU·hour)",
+    "WEKA_ILS": "WEKA USD is vendored from nebius.com/prices; ILS not published there",
     "Object Storage transfer volume": "Transfer resource itself is free of a service fee; egress/storage billed on buckets via usage metrics",
     "spot_live_market": "Current per-region spot SKU prices are dynamic via public API; catalog stores published floors/fixed rates only, not live quotes",
     "spot_platforms_without_published_floor": "GPU platforms not listed with 'From $X' or fixed preemptible rows in compute pricing have no inventable floor (e.g. GB200/GB300)"

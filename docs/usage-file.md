@@ -75,3 +75,5 @@ See [`examples/usage.yaml`](../examples/usage.yaml) in the repo.
 2. Prefer full addresses under `resources:` when names collide across modules.
 3. For autoscaling node groups, set `node_count` for a point estimate, or rely on min/max node counts in Terraform for the estimate’s min/max band.
 4. Refresh usage as your capacity plan changes; the catalog prices the metrics, it does not infer them.
+
+For **quote-only catalog rates** (VAST, GB200/GB300, `NETWORK_HDD`), see [catalog-price.md](catalog-price.md) (`--catalog-price`) — that flag fills missing **prices**, not planned usage volumes.

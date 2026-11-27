@@ -124,8 +124,8 @@ def test_mk8s_node_group_and_serverless(catalog, fixtures_dir: Path) -> None:
     assert any("NETWORK_HDD" in w for w in hdd.warnings)
 
     weka = next(i for i in result.after_items if i.address.endswith(".weka"))
-    assert weka.unknown is True
-    assert any("WEKA" in w for w in weka.warnings)
+    assert weka.unknown is False
+    assert weka.amount == pytest.approx(0.10 * 10240, rel=1e-6)
 
     nvl = next(i for i in result.after_items if i.address.endswith(".gb"))
     assert nvl.amount == 0.0

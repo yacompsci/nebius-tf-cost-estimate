@@ -184,7 +184,23 @@ def test_estimate_snapshot_and_filesystem(catalog, fixtures_dir: Path) -> None:
         cfg,
         PlannedUsage(),
     )
-    assert weka.unknown is True
+    assert weka.unknown is False
+    assert weka.amount == pytest.approx(0.10 * 100, rel=1e-6)
+
+    vast = estimate_filesystem(
+        ResourceSnapshot(
+            address="nebius_compute_v1_filesystem.vast",
+            type="nebius_compute_v1_filesystem",
+            name="vast",
+            provider_name="registry.terraform.io/nebius/nebius",
+            side="after",
+            values={"type": "VAST", "size_gibibytes": 100},
+        ),
+        catalog,
+        cfg,
+        PlannedUsage(),
+    )
+    assert vast.unknown is True
 
 
 def test_preemptible_reject_policy(catalog, fixtures_dir: Path) -> None:

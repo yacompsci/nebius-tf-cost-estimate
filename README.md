@@ -75,6 +75,7 @@ make e2e
 | `--budget-compare after\|delta\|abs_delta` | Which **max** figure to gate (`after_total_max`, `delta_max`, or worst `abs` delta) |
 | `--usage-file PATH` | YAML/JSON planned usage |
 | `--usage-metric KEY=VALUE` | Default usage overrides (repeatable) |
+| `--catalog-price KEY=VALUE` | Quote / missing catalog rates (repeatable); see [docs/catalog-price.md](docs/catalog-price.md) |
 | `--catalog PATH` | Override vendored `prices.json` |
 | `--preemptible-policy on_demand\|floor\|reject` | Spot: `on_demand` → min floor / max on-demand; `floor` → both at published floor; `reject` → unknown |
 | `--json` | Machine-readable report |
@@ -89,6 +90,19 @@ nebius-tf-cost estimate --help
 Object Storage, MK8s node counts, Serverless AI duty cycle, and local SSD size are not fully encoded in Terraform. Pass planned metrics with `--usage-file` / `--usage-metric`.
 
 See **[docs/usage-file.md](docs/usage-file.md)** for the file shape, metric table, lookup order, and [examples/usage.yaml](examples/usage.yaml).
+
+## Quote-only / missing catalog rates
+
+GB200/GB300 platforms, VAST, and `NETWORK_HDD` have no public list price in the vendored catalog. Supply a private rate with `--catalog-price` (same `KEY=VALUE` repeatable style as `--usage-metric`):
+
+```bash
+nebius-tf-cost estimate --plan plan.json \
+  --catalog-price VAST=0.12 \
+  --catalog-price platform.GB200=25 \
+  --catalog-price disk.NETWORK_HDD=0.05
+```
+
+See **[docs/catalog-price.md](docs/catalog-price.md)** for key vocabulary, units, and override-vs-public-rate behavior. WEKA USD ($0.10/GiB·month) is vendored from [nebius.com/prices](https://nebius.com/prices).
 
 ## Exit codes
 

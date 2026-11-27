@@ -70,13 +70,18 @@ JSON includes `*_min` / `*_max` fields; `before_total` / `after_total` / `delta`
 
 | Type / item | Notes |
 |-------------|-------|
-| `NETWORK_HDD` disks / filesystems | No public list price in compute pricing at catalog fetch — estimated as **unknown** (amount 0 + warning) |
-| Filesystem `WEKA` / `VAST` | No public list price — **unknown** |
+| `NETWORK_HDD` disks / filesystems | No public list price — **unknown** unless `--catalog-price disk.NETWORK_HDD=...` / `filesystem.NETWORK_HDD=...` |
+| Filesystem `VAST` | Quote/enterprise — **unknown** unless `--catalog-price VAST=...` ($/GiB·month) |
+| Filesystem `WEKA` | USD **$0.10/GiB·month** vendored from [nebius.com/prices](https://nebius.com/prices); ILS not published there (override with `--catalog-price WEKA=...` under `--currency ILS`) |
 | Local SSD size | Priced when `local_ssd_gib` usage is set; otherwise 0 + warning if `local_disks` requested |
-| GB200 / GB300 (NVL groups) | Group handle is free; no published per-GPU list price or spot floor for those platforms |
+| GB200 / GB300 (NVL groups) | Group handle is free; member platform rates are quote-only — use `--catalog-price platform.GB200=...` / `GB300=...` ($/GPU·hour) |
 | Live spot SKU quotes | Dynamic per region; use public API / website — catalog keeps published floors only |
 | Serverless CPU selectors | Need `preset` (or platform+preset) for RAM; GPU selectors map to default platforms |
 | Object Storage transfers | No separate transfer service fee; destination storage / egress still need bucket usage metrics |
+
+### `--catalog-price` overrides
+
+Repeatable `KEY=VALUE` flags (same style as `--usage-metric`) fill null/missing catalog rates for the selected `--currency`. Existing public rates may be overridden (**warning**). Under `--strict-check`, a hole covered by `--catalog-price` no longer fails. Key vocabulary and units: [docs/catalog-price.md](docs/catalog-price.md).
 
 ## Security
 

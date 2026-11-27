@@ -13,6 +13,10 @@ from typing import TextIO
 from nebius_tf_cost import __version__
 from nebius_tf_cost.budget import evaluate_budget, strict_check_reasons
 from nebius_tf_cost.catalog import load_catalog
+from nebius_tf_cost.catalog_price import (
+    apply_catalog_price_overrides,
+    parse_catalog_price_cli_overrides,
+)
 from nebius_tf_cost.config import EstimateConfig, PlannedUsage
 from nebius_tf_cost.errors import EstimateError, ExitCode
 from nebius_tf_cost.estimate import EstimateResult, LineItem, run_estimate
@@ -34,6 +38,7 @@ examples:
   nebius-tf-cost estimate --plan plan.json --budget 500 --strict-check
   nebius-tf-cost estimate --state state.json --usage-file usage.yaml --period hour
   nebius-tf-cost estimate --plan plan.json --usage-metric stored_gib=100 --currency USD
+  nebius-tf-cost estimate --plan plan.json --catalog-price VAST=0.12 --catalog-price GB200=25
 
 exit codes:
   0  success (warnings only unless --strict-check)
@@ -95,6 +100,17 @@ exit codes:
         default=[],
         metavar="KEY=VALUE",
         help="Default usage metric override (repeatable), e.g. stored_gib=100",
+    )
+    est.add_argument(
+        "--catalog-price",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help=(
+            "Catalog rate override (repeatable), e.g. VAST=0.12, disk.NETWORK_HDD=0.05, "
+            "platform.GB200=25. Fills null/missing rates; overrides existing with a warning. "
+            "See docs/catalog-price.md"
+        ),
     )
     est.add_argument(
         "--catalog",
@@ -253,6 +269,10 @@ def cmd_estimate(args: argparse.Namespace, out: TextIO, err: TextIO) -> int:
     cfg.validate()
 
     catalog = load_catalog(cfg.catalog_path)
+    price_overrides = parse_catalog_price_cli_overrides(args.catalog_price)
+    catalog, catalog_price_warnings = apply_catalog_price_overrides(
+        catalog, price_overrides, currency=cfg.currency
+    )
     doc = detect_and_load(cfg.input_path)
     usage = _merge_usage(load_usage(cfg.usage_path), parse_usage_cli_overrides(args.usage_metric))
 
@@ -260,6 +280,8 @@ def cmd_estimate(args: argparse.Namespace, out: TextIO, err: TextIO) -> int:
     cfg = replace(cfg, mode=_resolve_mode(cfg.mode, doc.kind))  # type: ignore[arg-type]
 
     result = run_estimate(doc, catalog, cfg, usage)
+    if catalog_price_warnings:
+        result.warnings = list(catalog_price_warnings) + list(result.warnings)
     verdict = evaluate_budget(
         result, cfg.budget, strict=cfg.strict_check, compare_mode=args.budget_compare
     )

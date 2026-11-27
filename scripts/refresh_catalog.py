@@ -46,6 +46,7 @@ URLS = [
     "https://docs.nebius.com/signup-billing/pricing-policy.md",
     "https://docs.nebius.com/compute/virtual-machines/preemptible.md",
     "https://nebius.com/spot-prices",
+    "https://nebius.com/prices",
 ]
 
 SPOT_API = "https://api.nebius.cloud/billing/v1alpha1/spot-price"

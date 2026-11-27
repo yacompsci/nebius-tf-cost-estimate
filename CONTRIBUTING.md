@@ -93,10 +93,12 @@ While working, append notes under `[Unreleased]` in [CHANGELOG.md](CHANGELOG.md)
    ```
 5. Pushing `v*` tags runs [`.github/workflows/release.yml`](.github/workflows/release.yml),
    which creates a GitHub Release from the matching CHANGELOG section.
-6. Publishing that release triggers
+6. The same tag push also runs
    [`.github/workflows/publish-pypi.yml`](.github/workflows/publish-pypi.yml), which
    builds the `nebius-tf-cost` sdist/wheel and uploads via **Trusted Publishing**
    (OIDC). No `PYPI_API_TOKEN` secret is used or required.
+   (Do not depend on `release: published` from the Release workflow — events created
+   with `GITHUB_TOKEN` do not start other workflows.)
 
 Consumers install with:
 
@@ -148,18 +150,21 @@ If the project **already** exists on PyPI:
    Owner / Repository / Workflow / Environment values as above
    ([docs](https://docs.pypi.org/trusted-publishers/adding-a-publisher/)).
 
-**3. After tagging**
+**3. After tagging (or for an already-cut tag such as `v1.0.0`)**
 
 1. Confirm the GitHub Release exists:
    `https://github.com/yacompsci/nebius-tf-cost-estimate/releases/tag/vX.Y.Z`
 2. Approve the `pypi` environment deployment if reviewers are required.
 3. Check Actions → **Publish to PyPI** for a green run.
-4. Verify: `pip index versions nebius-tf-cost` or
+4. If the tag was cut before Trusted Publisher / the `pypi` environment existed:
+   Actions → **Publish to PyPI** → **Run workflow** → enter the tag (e.g. `v1.0.0`).
+5. Verify: `pip index versions nebius-tf-cost` or
    [https://pypi.org/project/nebius-tf-cost/](https://pypi.org/project/nebius-tf-cost/).
 
 Do **not** invent or commit API tokens. If Trusted Publishing is not configured,
-the publish job will fail until the steps above are completed; re-run the failed
-workflow (or re-publish the release) after configuring the publisher.
+the publish job will fail until the steps above are completed; use
+**workflow_dispatch** (or re-run) after configuring the publisher — do not
+force-move the tag.
 
 ## Security reports
 

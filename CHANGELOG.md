@@ -12,6 +12,9 @@ and as the installed package version via setuptools dynamic metadata).
 
 ### Fixed
 
+- Instance `secondary_disks[]` with inline sized `managed_disk.spec` are folded into
+  the instance estimate (previously silent underprice). `existing_disk` / size-less
+  stubs stay ignored on the instance line — same attach-by-ref rules as boot disks.
 - Instance boot disks attached by `existing_disk` (id-only) or without inline
   `managed_disk.spec` size are ignored on the instance line — no “missing size_*”
   / “boot disk price unknown” warnings and no double-count when the disk is already

@@ -204,7 +204,8 @@ python scripts/discover_uncovered_types.py --dry-run --repo yacompsci/nebius-tf-
 - **max** — pessimistic (on-demand ceiling for dynamic spot under `--preemptible-policy on_demand`; autoscaling `max_node_count`); budget uses this
 - Fixed preemptible platforms (L40S) use published preemptible list rates for both bounds
 
-See [ASSUMPTIONS.md](ASSUMPTIONS.md) for full semantics.
+See [ASSUMPTIONS.md](ASSUMPTIONS.md) for full semantics (including when instance
+`boot_disk` / `secondary_disks` fold into the instance vs attach-by-ref).
 
 ## Contributing
 

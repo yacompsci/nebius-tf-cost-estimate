@@ -8,6 +8,7 @@ from nebius_tf_cost.config import EstimateConfig, PlannedUsage
 from nebius_tf_cost.estimate import (
     LineItem,
     _inline_managed_boot_disk_spec,
+    _inline_managed_disk_spec,
     _is_preemptible,
     _size_gib,
     _sum_items_max,
@@ -32,7 +33,7 @@ def test_size_gib_unit_variants() -> None:
     assert _size_gib({}) is None
 
 
-def test_inline_managed_boot_disk_spec() -> None:
+def test_inline_managed_disk_spec() -> None:
     sized = {
         "attach_mode": "READ_WRITE",
         "managed_disk": {
@@ -40,30 +41,32 @@ def test_inline_managed_boot_disk_spec() -> None:
             "spec": {"type": "NETWORK_SSD", "size_gibibytes": 64},
         },
     }
-    assert _inline_managed_boot_disk_spec(sized) == {
+    assert _inline_managed_disk_spec(sized) == {
         "type": "NETWORK_SSD",
         "size_gibibytes": 64,
     }
+    # Alias used by boot-disk tests / callers
+    assert _inline_managed_boot_disk_spec(sized) == _inline_managed_disk_spec(sized)
     # existing_disk id-only → ignore
     assert (
-        _inline_managed_boot_disk_spec(
+        _inline_managed_disk_spec(
             {"attach_mode": "READ_WRITE", "existing_disk": {"id": "computdisk-1"}}
         )
         is None
     )
     # empty / null managed_disk (common alongside existing_disk in state) → ignore
-    assert _inline_managed_boot_disk_spec({"managed_disk": None}) is None
-    assert _inline_managed_boot_disk_spec({"managed_disk": {}}) is None
+    assert _inline_managed_disk_spec({"managed_disk": None}) is None
+    assert _inline_managed_disk_spec({"managed_disk": {}}) is None
     # name-only managed stub without spec/size → ignore
-    assert _inline_managed_boot_disk_spec({"managed_disk": {"name": "boot"}}) is None
+    assert _inline_managed_disk_spec({"managed_disk": {"name": "boot"}}) is None
     assert (
-        _inline_managed_boot_disk_spec(
+        _inline_managed_disk_spec(
             {"managed_disk": {"name": "boot", "spec": {"type": "NETWORK_SSD"}}}
         )
         is None
     )
-    assert _inline_managed_boot_disk_spec(None) is None
-    assert _inline_managed_boot_disk_spec({}) is None
+    assert _inline_managed_disk_spec(None) is None
+    assert _inline_managed_disk_spec({}) is None
 
 
 def test_is_preemptible_variants() -> None:
@@ -330,6 +333,137 @@ def test_inline_boot_disk_still_priced_on_instance(catalog, fixtures_dir: Path) 
     item = estimate_instance(snap, catalog, cfg, PlannedUsage())
     assert item.amount == pytest.approx(43.8 + 7.1, rel=1e-6)
     assert "boot_disk=7.100000" in item.details
+
+
+def test_inline_secondary_managed_disk_priced_on_instance(catalog, fixtures_dir: Path) -> None:
+    """Sized secondary managed_disk.spec folds into the instance (sibling of boot #21)."""
+    snap = ResourceSnapshot(
+        address="nebius_compute_v1_instance.with_data",
+        type="nebius_compute_v1_instance",
+        name="with_data",
+        provider_name="registry.terraform.io/nebius/nebius",
+        side="after",
+        values={
+            "resources": {"platform": "cpu-e2", "preset": "2vcpu-8gb"},
+            "boot_disk": {
+                "managed_disk": {
+                    "name": "boot",
+                    "spec": {"type": "NETWORK_SSD", "size_gibibytes": 100},
+                }
+            },
+            "secondary_disks": [
+                {
+                    "attach_mode": "READ_WRITE",
+                    "managed_disk": {
+                        "name": "data",
+                        "spec": {"type": "NETWORK_SSD", "size_gibibytes": 50},
+                    },
+                },
+                {
+                    # second sized secondary
+                    "managed_disk": {
+                        "spec": {
+                            "type": "NETWORK_SSD_NON_REPLICATED",
+                            "size_gibibytes": 100,
+                        }
+                    }
+                },
+            ],
+        },
+    )
+    cfg = EstimateConfig(input_path=fixtures_dir / "plan_create.json", period="month")
+    item = estimate_instance(snap, catalog, cfg, PlannedUsage())
+    boot = 7.1  # 100 GiB NETWORK_SSD
+    sec = 50 * 0.071 + 100 * 0.053  # sized secondaries
+    assert item.amount == pytest.approx(43.8 + boot + sec, rel=1e-6)
+    assert "boot_disk=7.100000" in item.details
+    assert f"secondary_disks={sec:.6f}" in item.details
+    assert not any("missing size" in w for w in item.warnings)
+
+
+def test_existing_secondary_disk_ignored_on_instance(catalog, fixtures_dir: Path) -> None:
+    """secondary_disks existing_disk / size-less stubs: silent ignore (same as boot #21)."""
+    cfg = EstimateConfig(input_path=fixtures_dir / "plan_create.json", period="month")
+    compute_only = 43.8
+    for secondary in (
+        [{"attach_mode": "READ_WRITE", "existing_disk": {"id": "computdisk-data"}}],
+        [
+            {
+                "existing_disk": {"id": "computdisk-data"},
+                "managed_disk": None,
+            }
+        ],
+        [{"managed_disk": {"name": "data-only"}}],
+        [{"managed_disk": {"name": "data", "spec": {"type": "NETWORK_SSD"}}}],
+        # mix: one attach-by-ref + one size-less — still compute only
+        [
+            {"existing_disk": {"id": "computdisk-a"}},
+            {"managed_disk": {"spec": {"type": "NETWORK_SSD"}}},
+        ],
+    ):
+        snap = ResourceSnapshot(
+            address="nebius_compute_v1_instance.sec_ref",
+            type="nebius_compute_v1_instance",
+            name="sec_ref",
+            provider_name="registry.terraform.io/nebius/nebius",
+            side="after",
+            values={
+                "resources": {"platform": "cpu-e2", "preset": "2vcpu-8gb"},
+                "boot_disk": {"existing_disk": {"id": "computdisk-boot"}},
+                "secondary_disks": secondary,
+            },
+        )
+        item = estimate_instance(snap, catalog, cfg, PlannedUsage())
+        assert item.amount == pytest.approx(compute_only, rel=1e-6)
+        assert "boot_disk=" not in item.details
+        assert "secondary_disks=" not in item.details
+        assert not any("missing size" in w for w in item.warnings)
+        assert not any("disk price unknown" in w for w in item.warnings)
+        assert item.unknown is False
+
+
+def test_secondary_existing_disk_no_double_count_with_disk_resource(
+    catalog, fixtures_dir: Path
+) -> None:
+    """Disk resource + secondary existing_disk attach: disk once, instance compute only."""
+    disk_snap = ResourceSnapshot(
+        address="nebius_compute_v1_disk.data",
+        type="nebius_compute_v1_disk",
+        name="data",
+        provider_name="registry.terraform.io/nebius/nebius",
+        side="after",
+        values={"type": "NETWORK_SSD", "size_gibibytes": 100, "id": "computdisk-data"},
+    )
+    inst_snap = ResourceSnapshot(
+        address="nebius_compute_v1_instance.app",
+        type="nebius_compute_v1_instance",
+        name="app",
+        provider_name="registry.terraform.io/nebius/nebius",
+        side="after",
+        values={
+            "resources": {"platform": "cpu-e2", "preset": "2vcpu-8gb"},
+            "boot_disk": {
+                "managed_disk": {
+                    "spec": {"type": "NETWORK_SSD", "size_gibibytes": 100},
+                }
+            },
+            "secondary_disks": [{"existing_disk": {"id": "computdisk-data"}}],
+        },
+    )
+    cfg = EstimateConfig(input_path=fixtures_dir / "plan_create.json", period="month")
+    usage = PlannedUsage()
+    disk_item = estimate_resource(disk_snap, catalog, cfg, usage)
+    inst_item = estimate_instance(inst_snap, catalog, cfg, usage)
+    disk_cost = 7.1
+    compute = 43.8
+    assert disk_item.amount == pytest.approx(disk_cost, rel=1e-6)
+    assert inst_item.amount == pytest.approx(compute + disk_cost, rel=1e-6)
+    assert "boot_disk=" in inst_item.details
+    assert "secondary_disks=" not in inst_item.details
+    # Combined inventory cost = disk resource + instance (boot folded, secondary not)
+    assert disk_item.amount + inst_item.amount == pytest.approx(
+        disk_cost + compute + disk_cost, rel=1e-6
+    )
 
 
 def test_attached_boot_disks_no_double_count(catalog, fixtures_dir: Path) -> None:

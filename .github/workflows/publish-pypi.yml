@@ -1,13 +1,24 @@
 name: Publish to PyPI
 
 # Publishes package `nebius-tf-cost` via Trusted Publishing (OIDC).
-# Triggered after `.github/workflows/release.yml` creates a GitHub Release from a v* tag.
+# Triggers on v* tag push (same event as release.yml). Do NOT rely on
+# `release: published` from release.yml — GITHUB_TOKEN-created releases do not
+# start other workflows.
 # Requires a PyPI Trusted Publisher + GitHub Environment named `pypi` (see CONTRIBUTING.md).
 # No PYPI_API_TOKEN secret — do not add long-lived tokens.
+# Use workflow_dispatch to publish an already-cut tag (e.g. v1.0.0) after
+# Trusted Publisher is configured.
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Annotated SemVer tag to publish (e.g. v1.0.0)"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -17,21 +28,37 @@ jobs:
     name: Build distributions
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          case "$TAG" in
+            v*) ;;
+            *) echo "Tag must look like vX.Y.Z, got: $TAG" >&2; exit 1 ;;
+          esac
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
 
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
-      - name: Verify release tag matches __version__
+      - name: Verify tag matches __version__
         env:
           PYTHONPATH: src
+          EXPECTED: ${{ steps.tag.outputs.version }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          EXPECTED="${TAG#v}"
           ACTUAL="$(python -c 'from nebius_tf_cost import __version__; print(__version__)')"
-          echo "tag=$TAG expected=$EXPECTED actual=$ACTUAL"
+          echo "tag=${{ steps.tag.outputs.tag }} expected=$EXPECTED actual=$ACTUAL"
           test "$ACTUAL" = "$EXPECTED"
 
       - name: Install build

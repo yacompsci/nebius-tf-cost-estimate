@@ -10,6 +10,12 @@ and as the installed package version via setuptools dynamic metadata).
 
 ## [Unreleased]
 
+### Fixed
+
+- PyPI publish workflow triggers on `v*` tag push and `workflow_dispatch` (not on
+  `release: published` from `GITHUB_TOKEN`), so Trusted Publishing can run for
+  already-cut tags such as `v1.0.0`.
+
 ## [1.0.0] - 2026-11-27
 
 First declared SemVer release. The package previously carried an undeclared `0.1.0`

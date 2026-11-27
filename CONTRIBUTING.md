@@ -93,13 +93,73 @@ While working, append notes under `[Unreleased]` in [CHANGELOG.md](CHANGELOG.md)
    ```
 5. Pushing `v*` tags runs [`.github/workflows/release.yml`](.github/workflows/release.yml),
    which creates a GitHub Release from the matching CHANGELOG section.
+6. Publishing that release triggers
+   [`.github/workflows/publish-pypi.yml`](.github/workflows/publish-pypi.yml), which
+   builds the `nebius-tf-cost` sdist/wheel and uploads via **Trusted Publishing**
+   (OIDC). No `PYPI_API_TOKEN` secret is used or required.
 
-PyPI publish is **not** part of this flow yet (follow-up when packaging/publish is ready).
-Until then, consumers install from git or a local editable checkout:
+Consumers install with:
+
+```bash
+pip install nebius-tf-cost
+```
+
+Until the first PyPI upload succeeds, install from git:
 
 ```bash
 pip install "git+https://github.com/yacompsci/nebius-tf-cost-estimate.git"
 ```
+
+### Maintainer setup: PyPI Trusted Publisher (one-time)
+
+Do this **before** (or right after) cutting `v1.0.0` so the publish workflow can
+authenticate. Prefer Trusted Publishing over long-lived API tokens.
+
+**1. GitHub Environment**
+
+1. Open the repo → **Settings** → **Environments** → **New environment**.
+2. Name it exactly `pypi` (must match `environment.name` in
+   `.github/workflows/publish-pypi.yml`).
+3. Optional but recommended: enable **Required reviewers** so a maintainer must
+   approve each publish run.
+4. No environment secrets are needed for Trusted Publishing.
+
+**2. PyPI Trusted Publisher**
+
+Package name on PyPI: **`nebius-tf-cost`**.
+
+If the project does **not** exist yet on PyPI (first publish):
+
+1. Sign in at [https://pypi.org](https://pypi.org) (account that will own the
+   project).
+2. Account settings → **Publishing** → **Add a new pending publisher**
+   ([docs](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/)).
+3. Fill in:
+   - **PyPI Project Name:** `nebius-tf-cost`
+   - **Owner:** `yacompsci`
+   - **Repository name:** `nebius-tf-cost-estimate`
+   - **Workflow name:** `publish-pypi.yml` (filename only, under `.github/workflows/`)
+   - **Environment name:** `pypi`
+4. Save. The pending publisher becomes active on the first successful upload.
+
+If the project **already** exists on PyPI:
+
+1. Project → **Manage** → **Publishing** → add a GitHub publisher with the same
+   Owner / Repository / Workflow / Environment values as above
+   ([docs](https://docs.pypi.org/trusted-publishers/adding-a-publisher/)).
+
+**3. After tagging**
+
+1. Confirm the GitHub Release exists:
+   `https://github.com/yacompsci/nebius-tf-cost-estimate/releases/tag/vX.Y.Z`
+2. Approve the `pypi` environment deployment if reviewers are required.
+3. Check Actions → **Publish to PyPI** for a green run.
+4. Verify: `pip index versions nebius-tf-cost` or
+   [https://pypi.org/project/nebius-tf-cost/](https://pypi.org/project/nebius-tf-cost/).
+
+Do **not** invent or commit API tokens. If Trusted Publishing is not configured,
+the publish job will fail until the steps above are completed; re-run the failed
+workflow (or re-publish the release) after configuring the publisher.
 
 ## Security reports
 

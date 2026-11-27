@@ -7,6 +7,8 @@ Guidance for coding agents and humans automating changes in this repo.
 | Path | Role |
 |------|------|
 | `src/nebius_tf_cost/` | Library + CLI (`cli`, `estimate`, `catalog`, `terraform`, `usage`, `budget`, …) |
+| `src/nebius_tf_cost/__init__.py` | `__version__` — **single SemVer source** (setuptools + `--version`) |
+| `CHANGELOG.md` | Keep a Changelog notes (`[Unreleased]` + released sections) |
 | `src/nebius_tf_cost/data/prices.json` | Packaged catalog (shipped with the wheel) |
 | `data/prices.json` | Same catalog at repo root — **keep in sync** with the packaged copy |
 | `tests/` | Pytest suite (default excludes `@pytest.mark.e2e`) |
@@ -52,6 +54,12 @@ When adding estimators, CLI flags, parsers, usage metrics, or catalog fields:
 2. Keep default CI/`make check` offline and credential-free.
 3. Mark true Terraform plan e2e with `@pytest.mark.e2e` under `tests/e2e/`; never `terraform apply`; use provider `no_credentials` / plan-only flows only.
 4. Do not weaken lint (`ruff check` / `ruff format --check` on `src tests scripts`).
+
+## Versioning
+
+- Bump only `src/nebius_tf_cost/__version__`; never hardcode a second version in `pyproject.toml`.
+- Record user-visible changes under `[Unreleased]` in `CHANGELOG.md` in the same PR.
+- Release process (tag `vX.Y.Z`, GitHub Release workflow): see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Out of scope for opportunistic edits
 

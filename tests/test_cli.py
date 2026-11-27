@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 
+from nebius_tf_cost import __version__
 from nebius_tf_cost.cli import main
 from nebius_tf_cost.errors import ExitCode
 
@@ -16,6 +19,20 @@ def test_cli_help() -> None:
         main(["--help"])
     except SystemExit as exc:
         assert exc.code == 0
+
+
+def test_cli_version(capsys) -> None:
+    try:
+        main(["--version"])
+    except SystemExit as exc:
+        assert exc.code == 0
+    out = capsys.readouterr().out
+    assert __version__ in out
+    assert re.fullmatch(r"\d+\.\d+\.\d+", __version__)
+
+
+def test_package_metadata_version_matches() -> None:
+    assert pkg_version("nebius-tf-cost") == __version__
 
 
 def test_cli_estimate_ok(fixtures_dir: Path, capsys) -> None:

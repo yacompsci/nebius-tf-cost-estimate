@@ -8,6 +8,8 @@ Estimate **Nebius AI Cloud** costs from Terraform **plan** or **state** JSON —
 
 Uses a vendored public price catalog (`data/prices.json`) derived from [Nebius docs](https://docs.nebius.com/llms.txt). Supports **min/max** total estimates and plan deltas, optional `--strict-check` gating on the **max** (pessimistic) figure / missing usage / unknown types, hour/month/year periods, and planned usage for usage-based resources (Object Storage, MK8s node counts, Serverless AI duty cycle, local SSD size).
 
+**Version:** SemVer **1.0.0** (stable CLI for CI). See [CHANGELOG.md](CHANGELOG.md); bump process in [CONTRIBUTING.md](CONTRIBUTING.md). `nebius-tf-cost --version` reports the installed package version.
+
 ## Install
 
 ```bash
@@ -176,7 +178,8 @@ See [ASSUMPTIONS.md](ASSUMPTIONS.md) for full semantics.
 
 Contributions are welcome. See:
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) — setup, lint/test, PR norms, e2e
+- [CONTRIBUTING.md](CONTRIBUTING.md) — setup, lint/test, PR norms, e2e, **versioning / releases**
+- [CHANGELOG.md](CHANGELOG.md) — Keep a Changelog release notes
 - [AGENTS.md](AGENTS.md) — layout and rules for coding agents
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - [SECURITY.md](SECURITY.md) — vulnerability reporting (no cloud secrets required to use or test this tool)
